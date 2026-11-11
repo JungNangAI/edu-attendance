@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>출석 체크</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/common.css">
+<style>
+body{background:var(--bg);min-height:100vh;min-height:100dvh}
+.head{background:var(--accent);color:var(--on-accent);padding:22px max(16px,env(safe-area-inset-left)) 46px;position:relative;overflow:hidden}
+.head::after{content:"";position:absolute;right:-60px;top:-60px;width:200px;height:200px;border-radius:50%;background:color-mix(in srgb,var(--on-accent) 10%,transparent)}
+.head img{max-height:40px;max-width:160px;object-fit:contain;display:block;margin-bottom:12px}
+.head .eyebrow{font-size:13px;opacity:.85}
+.head h1{font-size:23px;margin-top:2px}
+.main{max-width:520px;margin:-28px auto 0;padding:0 16px 120px;position:relative}
+.panel{background:var(--panel);border-radius:18px;box-shadow:var(--shadow);padding:18px;border:1px solid var(--line)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;background:var(--soft);color:var(--ink);padding:5px 12px;border-radius:99px;margin-bottom:12px}
+.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:#2fb26a}
+.search{position:relative;margin-bottom:10px}
+.search input{padding-left:40px}
+.search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--muted)}
+.list{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto;padding:2px;margin:0 -2px}
+.who{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;cursor:pointer;background:var(--panel);transition:border-color .15s,background .15s,transform .1s}
+.who:active{transform:scale(.99)}
+.who input{position:absolute;opacity:0;pointer-events:none}
+.who .dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);flex:none;display:grid;place-items:center;transition:.15s}
+.who .t{min-width:0}
+.who b{display:block;font-size:17px}
+.who span{font-size:13.5px;color:var(--muted)}
+.who:has(input:checked){border-color:var(--accent);background:var(--soft)}
+.who:has(input:checked) .dot{border-color:var(--accent);background:var(--accent)}
+.who:has(input:checked) .dot::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--on-accent)}
+.who:has(input:focus-visible){outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:2px}
+.empty{color:var(--muted);text-align:center;padding:18px 0}
+.bottom{position:fixed;left:0;right:0;bottom:0;padding:12px 16px max(14px,env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--bg) 30%)}
+.bottom .in{max-width:520px;margin:0 auto}
+.note{font-size:13px;color:var(--muted);text-align:center;margin:14px 0 0}
+.err{color:var(--bad);font-size:14px;margin:8px 0 0;min-height:1em}
+
+.result{text-align:center;padding:28px 18px}
+.check{width:96px;height:96px;margin:0 auto 14px}
+.check circle{fill:none;stroke:var(--ok);stroke-width:5;stroke-dasharray:283;stroke-dashoffset:283;animation:draw .7s ease forwards}
+.check path{fill:none;stroke:var(--ok);stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:60;stroke-dashoffset:60;animation:draw .45s .55s ease forwards}
+.result.dup .check circle,.result.dup .check path{stroke:var(--warn)}
+@keyframes draw{to{stroke-dashoffset:0}}
+.result h2{font-size:24px;margin-bottom:6px;animation:rise .5s .3s both}
+.result .who-line{font-size:18px;font-weight:700;animation:rise .5s .45s both}
+.result .meta{color:var(--muted);margin:4px 0 0;animation:rise .5s .55s both}
+.result .hint2{margin:14px 0 0;background:var(--soft);border-radius:12px;padding:10px 12px;font-size:15px;animation:rise .5s .65s both}
+.result .btn{margin-top:16px;animation:rise .5s .75s both}
+.result .again{display:inline-block;margin-top:14px;font-size:13px;color:var(--muted);background:none;border:0;text-decoration:underline;cursor:pointer;font:inherit;font-size:13px}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}
+.full{padding:60px 20px;text-align:center}
+</style>
+</head>
+<body>
+<header class="head" id="head"><div id="logo"></div><div class="eyebrow" id="subtitle"></div><h1 id="title">출석 체크</h1></header>
+<main class="main">
+  <section class="panel" id="formPanel" hidden>
+    <span class="pill" id="session"></span>
+    <label class="sr" for="q">이름이나 부서로 찾기</label>
+    <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15zm5.5-2 5 5"/></svg>
+      <input type="search" id="q" placeholder="이름이나 부서로 찾기" autocomplete="off"></div>
+    <div class="list" id="list" role="radiogroup" aria-label="내 이름 고르기"></div>
+    <p class="err" id="err" role="alert"></p>
+    <p class="note">목록에 이름이 없으면 담당자에게 말씀해 주세요.</p>
+  </section>
+  <section class="panel result" id="result" hidden></section>
+  <section class="panel full" id="full" hidden></section>
+</main>
+<div class="bottom" id="bottom" hidden><div class="in"><button type="button" class="btn primary big" id="go" disabled>내 이름을 골라 주세요</button></div></div>
+<script src="config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/sound.js"></script>
+<script>
+(function(){
+  'use strict';
+  const $ = id => document.getElementById(id), A = window.App;
+  const PREVIEW = A.query('preview') === '1', eventId = A.query('e');
+  let cfg, roster = [], session = null, chosen = null;
+
+  function show(which){ ['formPanel','result','full'].forEach(id => $(id).hidden = id !== which); $('bottom').hidden = which !== 'formPanel'; }
+  function full(t, m){ $('full').innerHTML = `<h2>${A.esc(t)}</h2><p class="hint">${A.esc(m)}</p>`; show('full'); }
+
+  function apply(ev, assets){
+    cfg = A.withDefaults(ev.config); roster = ev.roster || []; session = ev.session;
+    A.applyColors(document.documentElement, cfg.screen.bg, cfg.screen.accent);
+    document.title = (cfg.join.title || '출석') + ' · ' + (cfg.title || '');
+    $('title').textContent = cfg.join.title || '출석 체크';
+    $('subtitle').textContent = [cfg.subtitle, cfg.title].filter(Boolean).join(' · ');
+    $('logo').innerHTML = assets && assets.logo ? `<img src="${assets.logo}" alt="">` : '';
+    $('session').textContent = session ? session.label : '';
+    renderList('');
+  }
+  function renderList(q){
+    q = q.trim().toLowerCase();
+    const hits = roster.filter(p => !q || (p.name + ' ' + p.dept).toLowerCase().includes(q));
+    const shown = hits.slice(0, 80);
+    $('list').innerHTML = shown.length ? shown.map(p => `<label class="who"><input type="radio" name="who" value="${p.no}" ${chosen === p.no ? 'checked' : ''}>
+      <span class="dot" aria-hidden="true"></span><span class="t"><b>${A.esc(p.name)}</b><span>${A.esc(p.dept)}${p.rank ? ' · ' + A.esc(p.rank) : ''}</span></span></label>`).join('')
+      + (hits.length > shown.length ? `<p class="empty">${hits.length - shown.length}명 더 있어요. 이름을 더 입력해 주세요.</p>` : '')
+      : '<p class="empty">찾는 이름이 없어요</p>';
+  }
+  $('q').addEventListener('input', e => renderList(e.target.value));
+  $('list').addEventListener('change', e => {
+    chosen = +e.target.value; const p = roster.find(x => x.no === chosen);
+    $('go').disabled = false; $('go').textContent = `${p.name} 님으로 출석`; $('err').textContent = '';
+  });
+
+  function certUrl(p){ return A.siteBase() + 'cert.html?e=' + encodeURIComponent(eventId || 'preview') + '&p=' + p.no; }
+  function showResult(r){
+    const dup = r.status === 'dup';
+    $('result').className = 'panel result' + (dup ? ' dup' : '');
+    $('result').innerHTML = `<svg class="check" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="45"/><path d="M30 52l13 13 27-29"/></svg>
+      <h2>${A.esc(dup ? '이미 출석했습니다' : cfg.join.ok_title)}</h2>
+      <div class="who-line">${A.esc(r.dept)} ${A.esc(r.name)} 님</div>
+      <p class="meta">${A.esc(r.session || '')} · ${r.at ? A.hhmm(r.at) : ''} ${dup ? '제출' : '출석'}</p>
+      ${dup ? '' : `<p class="hint2">${A.esc(cfg.join.ok_hint)}</p>`}
+      ${cfg.cert.enabled ? `<a class="btn primary big" href="${certUrl(r)}" target="_blank" rel="noopener">${A.esc(cfg.cert.button || '위촉장 받기')}</a>` : ''}
+      <br><button type="button" class="again" id="again">내 이름이 아니에요</button>`;
+    show('result');
+    $('again').onclick = () => { try { localStorage.removeItem('done:' + session.id); } catch(e){} chosen = null; $('go').disabled = true; $('go').textContent = '내 이름을 골라 주세요'; renderList(''); show('formPanel'); };
+    if (!dup) { try { Sound.sfx('phone'); } catch (e) {} }
+    if (!dup) A.confetti({ count: 90, colors: [cfg.screen.accent, '#ffd43b', '#51cf66', '#4dabf7'] });
+  }
+
+  $('go').addEventListener('click', async () => {
+    if (!chosen) return;
+    const btn = $('go'); btn.disabled = true; btn.textContent = '제출하는 중…';
+    try { Sound.configure('sfx'); Sound.unlock(); } catch (e) {}   // 누른 순간 소리 준비 (휴대폰은 효과음만)
+    try {
+      const r = PREVIEW ? { ...roster.find(x => x.no === chosen), status: 'ok', session: session.label, at: new Date().toISOString() }
+                        : await A.rpc('submit_attendance', { p_id: eventId, p_no: chosen });
+      if (r.status === 'error') throw new Error(r.message);
+      try { if (!PREVIEW) localStorage.setItem('done:' + session.id, JSON.stringify(r)); } catch(e){}
+      showResult(r);
+    } catch (e) {
+      $('err').textContent = e.message || '제출하지 못했습니다. 다시 눌러 주세요.';
+      btn.disabled = false; btn.textContent = '다시 제출';
+    }
+  });
+
+  (async function start(){
+    if (PREVIEW) {
+      const ping = setInterval(() => parent.postMessage({ type: 'preview-ready', page: 'join' }, location.origin), 400);
+      addEventListener('message', e => {
+        if (e.origin !== location.origin || !e.data || e.data.type !== 'preview') return;
+        clearInterval(ping);
+        const ev = e.data.event;
+        const r = ev.roster && ev.roster.length ? ev.roster : [{ no: 1, dept: '스마트정보과', rank: '', name: '김가람' }, { no: 2, dept: '감사담당관', rank: '', name: '이나래' }];
+        apply({ config: ev.config, roster: r, session: { id: 'p', label: ev.config.first_session || '1회차' } }, e.data.assets);
+        show('formPanel');
+      });
+      parent.postMessage({ type: 'preview-ready', page: 'join' }, location.origin);
+      return;
+    }
+    if (!A.ready) return full('준비 중입니다', '담당자에게 말씀해 주세요. (저장소 설정 없음)');
+    if (!eventId) return full('주소가 올바르지 않습니다', '강의실 화면의 QR을 다시 찍어 주세요.');
+    try {
+      const ev = await A.rpc('get_event', { p_id: eventId });
+      if (!ev) return full('행사를 찾을 수 없습니다', '강의실 화면의 QR을 다시 찍어 주세요.');
+      const assets = ev.assets.includes('logo') ? await A.loadAssets(eventId, ['logo']) : {};
+      apply(ev, assets);
+      let done = null; try { done = JSON.parse(localStorage.getItem('done:' + ev.session.id) || 'null'); } catch(e){}
+      if (done) { showResult({ ...done, status: 'dup' }); return; }
+      show('formPanel');
+    } catch (e) { full('불러오지 못했습니다', e.message); }
+  })();
+})();
+</script>
+</body>
+</html>

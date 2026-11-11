@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR 출석 · 위촉장</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/common.css">
+<style>
+.hero{background:linear-gradient(135deg,#1f3a5f,#2b5a8c);color:#fff;padding:56px 16px 70px;position:relative;overflow:hidden}
+.hero h1{font-size:clamp(28px,5vw,42px);margin:6px 0 10px;letter-spacing:-.01em}
+.hero p{max-width:560px;opacity:.88;margin:0 0 22px;font-size:17px}
+.hero .eyebrow{font-size:14px;opacity:.8;font-weight:600}
+.hero .btn{background:#fff;color:#1f3a5f;font-size:17px;padding:14px 22px}
+.hero .dots{position:absolute;right:-40px;top:20px;display:grid;grid-template-columns:repeat(6,46px);gap:10px;opacity:.9}
+.hero .dots i{width:46px;height:34px;border-radius:8px;background:rgba(255,255,255,.12);animation:lit 6s infinite}
+@keyframes lit{0%,60%,100%{background:rgba(255,255,255,.12)}70%,90%{background:#ffd43b;box-shadow:0 0 18px #ffd43b}}
+.tri{display:flex;height:6px}.tri i{flex:1}.tri i:nth-child(1){background:#106A3A}.tri i:nth-child(2){background:#9E1C84}.tri i:nth-child(3){background:#0057A3}
+.flow{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:-36px auto 26px;position:relative}
+.flow .card b{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#1f3a5f;color:#fff;margin-bottom:8px}
+.flow h3{font-size:17px;margin-bottom:4px}
+.flow p{margin:0;color:var(--muted);font-size:14.5px}
+.mine h2{font-size:20px;margin:6px 0 12px}
+.ev{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ev:last-child{border-bottom:0}
+.ev .t{flex:1;min-width:180px}
+.ev .t b{display:block;font-size:16px}
+.ev .t span{font-size:13px;color:var(--muted)}
+.ev .row{display:flex;gap:6px;flex-wrap:wrap}
+.ev .btn{min-height:38px;padding:7px 12px;font-size:14px}
+.notice{background:var(--warn-soft);color:var(--warn);border-radius:12px;padding:14px 16px;margin-bottom:16px}
+@media (max-width:720px){.flow{grid-template-columns:1fr}.hero .dots{display:none}}
+</style>
+</head>
+<body>
+<section class="hero"><div class="wrap">
+  <div class="dots" aria-hidden="true"></div>
+  <div class="eyebrow">교육·행사 운영 도구</div>
+  <h1>QR 출석 · 위촉장</h1>
+  <p>명단 엑셀만 올리면 강의실 화면에 QR이 뜨고, 참석자가 찍는 대로 이름이 하나씩 켜집니다. 출석부 엑셀과 위촉장·수료증까지 한 번에.</p>
+  <a class="btn" href="admin.html">새 행사 만들기</a>
+</div></section>
+<div class="tri" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="page"><div class="wrap">
+  <div class="flow">
+    <div class="card"><b>1</b><h3>행사 만들기</h3><p>명단 엑셀을 올리고 테마·색·로고를 고르면 링크와 QR이 나와요.</p></div>
+    <div class="card"><b>2</b><h3>강의실 화면 띄우기</h3><p>담당자용 링크로 화면을 띄우면 참석자가 QR을 찍는 대로 이름이 나와요.</p></div>
+    <div class="card"><b>3</b><h3>엑셀·새 회차</h3><p>화면 아래 도구로 출석부 엑셀을 받고, 다음 시간엔 [새 회차 시작].</p></div>
+  </div>
+  <p class="notice" id="notice" hidden>저장소(Supabase) 설정이 아직 없어요. 담당자는 README의 설정 안내를 따라 config.js를 채워 주세요.</p>
+  <section class="card mine">
+    <h2>이 브라우저에서 만든 행사</h2>
+    <div id="list"></div>
+    <p class="hint">관리 링크는 이 브라우저에만 저장돼요. 다른 PC에서 쓰려면 행사를 만들 때 받은 관리 링크를 열어 주세요. 행사(명단·출석 기록)는 마지막으로 쓴 날부터 10일 뒤 자동으로 지워져요. 출석부 엑셀은 미리 받아 두세요.</p>
+  </section>
+</div></div>
+<script src="config.js"></script>
+<script src="assets/common.js"></script>
+<script>
+(function(){
+  const A = window.App, $ = id => document.getElementById(id);
+  $('notice').hidden = A.ready;
+  const dots = document.querySelector('.hero .dots');
+  dots.innerHTML = Array.from({ length: 36 }, (_, i) => `<i style="animation-delay:${(i * 1.37) % 6}s"></i>`).join('');
+  function render(){
+    const list = A.myEvents();
+    $('list').innerHTML = list.length ? list.map(e => { const L = A.links(e.id, e.token); return `<div class="ev"><div class="t"><b>${A.esc(e.title || '(이름 없음)')}</b><span>${new Date(e.at).toLocaleDateString('ko-KR')} 만듦/저장</span></div>
+      <div class="row"><a class="btn primary" href="${L.screenAdmin}" target="_blank" rel="noopener">강의실 화면</a><a class="btn ghost" href="${L.admin}">설정·링크</a><button type="button" class="btn ghost" data-forget="${e.id}">목록에서 빼기</button></div></div>`; }).join('')
+      : '<p class="hint">아직 없어요. [새 행사 만들기]로 시작하세요.</p>';
+  }
+  $('list').addEventListener('click', async e => {
+    const id = e.target.dataset.forget; if (!id) return;
+    if (await A.dialog({ title: '목록에서 빼기', message: '이 브라우저 목록에서만 빠지고 행사는 그대로 남아요.\n관리 링크를 따로 적어 두지 않았다면 다시 고칠 수 없게 돼요.', ok: '빼기' })) { A.forgetEvent(id); render(); }
+  });
+  render();
+})();
+</script>
+</body>
+</html>

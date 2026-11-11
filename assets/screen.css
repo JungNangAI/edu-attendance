@@ -1,0 +1,90 @@
+/* 강의실 출석 화면. 프로젝터(16:9)에 맞춰 화면 크기 단위(vh·vw)로 크기를 정한다 */
+html,body{height:100%}
+body.screen{margin:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--f-body);
+  display:grid;grid-template-rows:auto 1fr auto;height:100vh;height:100dvh;position:relative}
+.bgimg{position:fixed;inset:0;background-size:cover;background-position:center;z-index:0;pointer-events:none}
+.bgimg.soft{opacity:.16;filter:saturate(.7)}
+.bgimg.full{opacity:1}
+.bgimg.full::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,color-mix(in srgb,var(--bg) 80%,transparent),color-mix(in srgb,var(--bg) 35%,transparent))}
+.s-head,.s-main,.s-foot{position:relative;z-index:1}
+
+/* 머리 */
+.s-head{display:flex;align-items:center;gap:2.2vw;padding:2.4vh 2.6vw 1.2vh}
+.s-logo img{height:7.5vh;max-width:16vw;object-fit:contain;display:block}
+.s-title{flex:1;min-width:0}
+.chip{display:inline-block;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:1.7vh;padding:.45vh 1.1vh;border-radius:99px;letter-spacing:.02em}
+.s-title .sub{font-size:2vh;color:var(--muted);margin-top:.6vh}
+.s-title h1{font-size:4.6vh;color:var(--ink);font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s-tags{text-align:right;font-size:2.3vh;font-weight:700;color:var(--ink);line-height:1.35}
+.s-tags div:nth-child(2){color:var(--muted);font-weight:600}
+
+/* 본문 */
+.s-main{display:grid;grid-template-columns:minmax(0,25vw) minmax(0,1fr);gap:2.2vw;padding:1vh 2.6vw 1vh;min-height:0}
+.s-side{display:flex;flex-direction:column;gap:2vh;min-height:0}
+.qr-card{background:#fff;color:#1b2133;border-radius:2vh;padding:2vh;box-shadow:0 1vh 4vh rgba(0,0,0,.12);text-align:center;position:relative;overflow:hidden}
+.qr-card::before{content:"";position:absolute;inset:0;border:.4vh solid var(--accent);border-radius:2vh;pointer-events:none}
+.qr-box{width:min(100%,34vh);aspect-ratio:1;margin:0 auto;position:relative}
+.qr-box svg{width:100%;height:100%;display:block}
+.qr-box::after{content:"";position:absolute;left:0;right:0;height:.6vh;top:0;background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  opacity:.55;animation:scan 3.2s ease-in-out infinite;border-radius:9px}
+@keyframes scan{0%,100%{top:2%}50%{top:96%}}
+.qr-card p{margin:1.4vh 0 0;font-size:2.1vh;font-weight:700;line-height:1.4;white-space:pre-line}
+
+.counter{display:flex;align-items:center;gap:1.6vh;background:var(--panel);border:1px solid var(--line);border-radius:2vh;padding:1.6vh 2vh}
+.ring{width:11vh;height:11vh;flex:none;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:9}
+.ring .track{stroke:var(--soft)}
+.ring .bar{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1)}
+.count-num{line-height:1}
+.count-num b{font-size:6.4vh;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;display:inline-block}
+.count-num b.bump{animation:bump .5s ease}
+@keyframes bump{40%{transform:scale(1.25)}}
+.count-num span{font-size:2.6vh;color:var(--muted);font-weight:600}
+.count-unit{font-size:2.1vh;color:var(--muted);margin-top:.6vh;font-weight:600}
+.session{font-size:2.1vh;font-weight:700;color:var(--ink);background:var(--soft);border-radius:1.4vh;padding:1.2vh 1.6vh;display:flex;align-items:center;gap:1vh}
+.session::before{content:"";width:1.1vh;height:1.1vh;border-radius:50%;background:#2fb26a;box-shadow:0 0 0 0 rgba(47,178,106,.6);animation:live 2s infinite}
+@keyframes live{70%{box-shadow:0 0 0 1.2vh rgba(47,178,106,0)}100%{box-shadow:0 0 0 0 rgba(47,178,106,0)}}
+.session.off::before{background:#c0392b;animation:none}
+
+.board{position:relative;min-height:0;min-width:0;border-radius:2vh}
+.s-foot{display:flex;justify-content:space-between;align-items:center;padding:.6vh 2.6vw 1.6vh;font-size:1.8vh;color:var(--muted)}
+
+/* 환영 배너 */
+.welcome{position:fixed;left:50%;bottom:6vh;transform:translate(-50%,calc(100% + 10vh));opacity:0;z-index:20;pointer-events:none;
+  transition:transform .55s cubic-bezier(.2,1.2,.3,1),opacity .3s}
+.welcome.show{transform:translate(-50%,0);opacity:1}
+.w-in{display:flex;align-items:baseline;gap:1.4vh;background:var(--accent);color:var(--on-accent);padding:2vh 4vh;border-radius:99px;
+  box-shadow:0 1.6vh 5vh rgba(0,0,0,.28);white-space:nowrap;font-size:3vh}
+.w-in b{font-size:4.6vh;font-weight:800}
+.w-in .w-dept{opacity:.8}
+.welcome.done .w-in{background:linear-gradient(90deg,#ff8a00,#e52e71);color:#fff}
+
+/* 칸 공통 */
+.slot{position:absolute;container-type:size}
+.nm{font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.dp{line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:keep-all;max-width:100%}
+.slot.cancel-ok{cursor:pointer}
+.slot.cancel-ok:hover{filter:brightness(1.08)}
+
+/* 관리 도구 */
+.admin-bar{position:fixed;right:1.6vw;bottom:1.6vh;z-index:30;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:70vw;
+  background:rgba(20,25,40,.86);backdrop-filter:blur(6px);padding:10px;border-radius:14px;transition:opacity .4s,transform .4s;font-family:var(--f-body)}
+.admin-bar.idle{opacity:0;transform:translateY(12px);pointer-events:none}
+.admin-bar button{font:inherit;font-size:14px;font-weight:600;background:#2c3550;color:#fff;border:0;border-radius:9px;padding:9px 13px;cursor:pointer;min-height:40px}
+.admin-bar button:hover{background:#3a466b}
+.admin-bar button.warn{background:#b2452f}
+.admin-tip{position:fixed;left:50%;top:1.2vh;transform:translateX(-50%);z-index:30;background:rgba(20,25,40,.86);color:#fff;font-size:13px;padding:6px 12px;border-radius:99px;transition:opacity .4s}
+.admin-tip.idle{opacity:0}
+
+.msg-full{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);z-index:50;text-align:center;padding:24px;font-size:20px;color:var(--text)}
+.msg-full h1{font-size:28px;margin-bottom:8px}
+
+.board.sweep{animation:sweep .7s ease}
+@keyframes sweep{0%{opacity:1}40%{opacity:0;transform:scale(.97)}100%{opacity:1}}
+
+@media (max-aspect-ratio:4/3){
+  .s-main{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .s-side{flex-direction:row;align-items:stretch}
+  .qr-card{flex:0 0 30vh}.qr-box{max-height:20vh}
+  .counter,.session{flex:1}
+}

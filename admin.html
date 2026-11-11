@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>행사 만들기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&family=Nanum+Myeongjo:wght@400;700;800&display=swap">
+<link rel="stylesheet" href="assets/common.css">
+<link rel="stylesheet" href="assets/admin.css">
+</head>
+<body>
+<header class="topbar"><div class="wrap">
+  <a class="home" href="index.html" aria-label="처음으로">←</a>
+  <div style="flex:1;min-width:0"><div class="eyebrow" id="modeLabel">새 행사</div><h1 id="pageTitle">행사 만들기</h1></div>
+  <button type="button" class="btn save" id="saveTop" hidden>저장</button>
+</div></header>
+
+<nav class="steps wrap" aria-label="단계">
+  <button type="button" data-step="1"><b>1</b><span>기본 정보</span></button>
+  <button type="button" data-step="2"><b>2</b><span>명단</span></button>
+  <button type="button" data-step="3"><b>3</b><span>출석 화면</span></button>
+  <button type="button" data-step="4"><b>4</b><span>위촉장·수료증</span></button>
+  <button type="button" data-step="5" id="stepFinish"><b>✓</b><span>만들기</span></button>
+</nav>
+
+<div class="layout wrap">
+  <main class="form-col">
+    <!-- 1. 기본 정보 -->
+    <section class="step card" data-step="1">
+      <h2>1. 기본 정보</h2>
+      <div class="field"><label class="f" for="title">행사(교육) 이름 <em>필수</em></label><input type="text" id="title" data-k="title" maxlength="40" placeholder="예: AI파트너스 목요클래스"></div>
+      <div class="field"><label class="f" for="subtitle">부제</label><input type="text" id="subtitle" data-k="subtitle" maxlength="50" placeholder="예: 중랑형 FDE 아파트 1기"></div>
+      <div class="field"><label class="f" for="org">주관 부서</label><input type="text" id="org" data-k="org" maxlength="40" placeholder="예: 중랑AI혁신팀"></div>
+      <div class="field" id="firstSessionBox"><label class="f" for="fs">첫 회차 이름</label><input type="text" id="fs" data-k="first_session" maxlength="40"><p class="hint">강의실 화면의 [새 회차 시작]으로 다음 회차를 엽니다. 회차마다 출석이 따로 쌓여요.</p></div>
+      <label class="check"><input type="checkbox" data-k="block_duplicate"> 한 회차에 한 사람 한 번만 출석 (중복 막기)</label>
+    </section>
+
+    <!-- 2. 명단 -->
+    <section class="step card" data-step="2" hidden>
+      <h2>2. 명단</h2>
+      <p class="hint" style="margin-top:-6px">엑셀 파일을 올리면 이 브라우저 안에서 읽습니다. 연번·부서·직위·성명만 저장하고, 전화번호 같은 다른 칸은 버려요.</p>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="명단 엑셀 파일 올리기">
+        <input type="file" id="rosterFile" accept=".xlsx,.xls,.csv" hidden>
+        <b>엑셀 파일을 여기에 끌어다 놓거나 눌러서 고르세요</b><span>.xlsx · .xls · .csv</span>
+      </div>
+      <div class="row-btns"><button type="button" class="btn ghost" id="pasteToggle">표를 복사해 붙여넣기</button><button type="button" class="btn ghost" id="sampleXls">명단 양식 내려받기</button></div>
+      <div id="pasteBox" hidden><textarea id="pasteArea" placeholder="엑셀에서 머리글을 포함해 표를 복사한 뒤 여기에 붙여넣으세요"></textarea><button type="button" class="btn primary" id="pasteGo">이 내용으로 읽기</button></div>
+      <div id="mapBox" hidden>
+        <h3>어느 열이 무엇인지 확인해 주세요</h3>
+        <div class="map-grid">
+          <label>연번<select data-map="no"></select></label>
+          <label>부서명<select data-map="dept"></select></label>
+          <label>직위(직급)<select data-map="rank"></select></label>
+          <label>성명 <em>필수</em><select data-map="name"></select></label>
+        </div>
+      </div>
+      <div id="rosterInfo"></div>
+      <div class="table-wrap"><table class="roster" id="rosterTable"></table></div>
+    </section>
+
+    <!-- 3. 출석 화면 -->
+    <section class="step card" data-step="3" hidden>
+      <h2>3. 출석 화면 디자인</h2>
+      <h3>테마</h3>
+      <div class="themes" id="themes" role="radiogroup" aria-label="테마"></div>
+      <h3>색</h3>
+      <div class="palettes" id="palettes"></div>
+      <div class="two">
+        <div class="field"><label class="f" for="cBg">바탕색</label><div class="color"><input type="color" id="cBg" data-k="screen.bg"><input type="text" data-k="screen.bg" maxlength="7" aria-label="바탕색 코드"></div></div>
+        <div class="field"><label class="f" for="cAc">강조색 (글자·칸)</label><div class="color"><input type="color" id="cAc" data-k="screen.accent"><input type="text" data-k="screen.accent" maxlength="7" aria-label="강조색 코드"></div></div>
+      </div>
+      <p class="warn-box" id="contrastWarn" hidden>바탕색과 강조색이 비슷해서 글자가 잘 안 보일 수 있어요.</p>
+      <h3>이미지</h3>
+      <div class="imgs">
+        <div class="img-slot" data-asset="logo"><div class="thumb"></div><div><b>로고</b><p class="hint">왼쪽 위에 표시. 투명 PNG가 좋아요.</p>
+          <div class="row-btns"><label class="btn ghost">올리기<input type="file" accept="image/*" hidden></label><button type="button" class="btn ghost rm">지우기</button><button type="button" class="btn ghost" data-default="jungnang_slogan.png">중랑 슬로건</button><button type="button" class="btn ghost" data-default="jungnang_slogan_white.png">흰색 슬로건</button></div></div></div>
+        <label class="check"><input type="checkbox" data-k="screen.characters"> 캐릭터 넣기. 이미지를 안 올리면 글주임 10명이 나와요</label>
+        <div class="field"><label class="f" for="cMotion">캐릭터 움직임 세기</label>
+          <select id="cMotion" data-k="screen.motion"><option value="calm">차분 — 교육 중에 켜 두기 좋아요 (살랑살랑, 이름 인사만)</option><option value="normal">보통 — 입장·접수 시간에 추천 (가끔 날아오고, 출석률 이벤트)</option><option value="wild">과하게 — 행사 분위기 최고조 (매번 날아오고 폭죽)</option></select>
+          <p class="hint">화면 주소 끝에 <code>&amp;motion=calm</code> 처럼 붙이면 그 자리에서 바로 바꿀 수 있어요.</p></div>
+        <div class="field"><label class="f" for="cSound">소리</label>
+          <select id="cSound" data-k="screen.sound"><option value="both">효과음 + 배경음악</option><option value="sfx">효과음만</option><option value="off">소리 없음</option></select>
+          <p class="hint">강의실 화면 아래의 <b>🔊 소리 켜기</b>를 한 번 눌러야 소리가 나요(브라우저 규칙). 출석할 때마다 효과음이 한 음씩 올라가고, 테마마다 다른 음악이 흘러요. 키보드 M 으로 전체 끄기·켜기. 화면 주소 끝에 <code>&amp;sound=off</code> 도 돼요.</p></div>
+        <div class="img-slot" data-asset="char_left"><div class="thumb"></div><div><b>캐릭터 (왼쪽)</b><p class="hint">장미축제 테마에서 화면 왼쪽(기본: 글주임). 누가 출석하면 폴짝 뛰며 반겨요. 배경이 투명한 PNG가 좋아요.</p>
+          <div class="row-btns"><label class="btn ghost">올리기<input type="file" accept="image/*" hidden></label><button type="button" class="btn ghost rm">지우기</button></div></div></div>
+        <div class="img-slot" data-asset="char_right"><div class="thumb"></div><div><b>캐릭터 (오른쪽)</b><p class="hint">중랑 카드·장미축제 테마에서 화면 오른쪽(기본: 환영 깃발 글주임).</p>
+          <div class="row-btns"><label class="btn ghost">올리기<input type="file" accept="image/*" hidden></label><button type="button" class="btn ghost rm">지우기</button></div></div></div>
+        <div class="img-slot" data-asset="bg"><div class="thumb"></div><div><b>배경·포스터</b><p class="hint">화면 뒤에 깔립니다.</p>
+          <div class="row-btns"><label class="btn ghost">올리기<input type="file" accept="image/*" hidden></label><button type="button" class="btn ghost rm">지우기</button>
+          <select data-k="screen.bg_image" aria-label="배경 보이기"><option value="soft">흐리게 깔기</option><option value="full">선명하게</option><option value="off">안 쓰기</option></select></div></div></div>
+      </div>
+      <h3>강의실 화면 문구</h3>
+      <div class="two">
+        <div class="field"><label class="f">제목 위 작은 글씨</label><input type="text" data-k="screen.texts.chip" maxlength="20"></div>
+        <div class="field"><label class="f">단위</label><input type="text" data-k="screen.texts.unit" maxlength="12" placeholder="명 출석"></div>
+        <div class="field"><label class="f">환영 문구 (이름 뒤)</label><input type="text" data-k="screen.texts.welcome" maxlength="24"></div>
+        <div class="field"><label class="f">캐릭터 말풍선</label><input type="text" data-k="screen.texts.cheer" maxlength="12"></div>
+        <div class="field"><label class="f">모두 왔을 때</label><input type="text" data-k="screen.texts.done" maxlength="24"></div>
+        <div class="field"><label class="f">오른쪽 위 1줄</label><input type="text" data-k="screen.texts.tag1" maxlength="24"></div>
+        <div class="field"><label class="f">오른쪽 위 2줄</label><input type="text" data-k="screen.texts.tag2" maxlength="24"></div>
+      </div>
+      <div class="field"><label class="f">QR 안내 (두 줄까지)</label><textarea data-k="screen.texts.qr_hint" rows="2" style="min-height:64px" maxlength="60"></textarea></div>
+      <div class="field"><label class="f">아래 안내</label><input type="text" data-k="screen.texts.foot" maxlength="60"></div>
+      <h3>참석자 휴대폰 문구</h3>
+      <div class="two">
+        <div class="field"><label class="f">제목</label><input type="text" data-k="join.title" maxlength="24"></div>
+        <div class="field"><label class="f">출석 완료 제목</label><input type="text" data-k="join.ok_title" maxlength="24"></div>
+      </div>
+      <div class="field"><label class="f">출석 완료 안내</label><input type="text" data-k="join.ok_hint" maxlength="40"></div>
+    </section>
+
+    <!-- 4. 위촉장·수료증 -->
+    <section class="step card" data-step="4" hidden>
+      <h2>4. 위촉장·수료증</h2>
+      <label class="check big"><input type="checkbox" data-k="cert.enabled" id="certOn"> 출석한 뒤 위촉장(수료증)을 받을 수 있게 하기</label>
+      <div id="certBox">
+        <div class="two">
+          <div class="field"><label class="f" for="kind">종류</label><select id="kind"><option>위촉장</option><option>수료증</option><option>감사장</option><option>임명장</option><option>표창장</option><option value="">직접 쓰기</option></select></div>
+          <div class="field"><label class="f" for="ctitle">제목</label><input type="text" id="ctitle" data-k="cert.title" maxlength="12"></div>
+        </div>
+        <div class="field"><label class="f">본문 (줄바꿈 가능, 세 줄까지)</label><textarea data-k="cert.body" rows="2" style="min-height:70px" maxlength="90"></textarea></div>
+        <div class="two">
+          <div class="field"><label class="f">명의</label><input type="text" data-k="cert.issuer" maxlength="20" placeholder="예: 중랑구청장"></div>
+          <div class="field"><label class="f">날짜</label>
+            <div class="seg"><label><input type="radio" name="dm" data-k="cert.date_mode" value="issue"> 받는 날</label><label><input type="radio" name="dm" data-k="cert.date_mode" value="fixed"> 정한 날</label></div>
+            <input type="date" data-k="cert.date" id="cdate"></div>
+        </div>
+        <h3>받는 사람 칸</h3>
+        <p class="hint" style="margin-top:-4px">부서명·직급·성명 칸은 출석 명단에서 자동으로 채워져요(받는 사람이 고칠 수 있음).</p>
+        <div id="fieldList"></div>
+        <button type="button" class="btn ghost" id="addField">칸 더하기</button>
+        <h3>받을 수 있는 사람</h3>
+        <div class="seg"><label><input type="radio" name="oa" data-k="cert.only_attendees" value="false"> 누구나</label><label><input type="radio" name="oa" data-k="cert.only_attendees" value="true"> 출석한 사람만</label></div>
+        <div class="two">
+          <div class="field"><label class="f">출석 화면 버튼 글자</label><input type="text" data-k="cert.button" maxlength="16"></div>
+          <div class="field"><label class="f">테두리</label><select data-k="cert.border"><option value="gold">금색 이중선</option><option value="line">한 줄</option><option value="none">없음</option></select></div>
+        </div>
+        <h3>이미지</h3>
+        <div class="imgs">
+          <div class="img-slot" data-asset="cert_mark"><div class="thumb"></div><div><b>마크</b><p class="hint">흐린 워터마크와 자동 직인에 쓰여요. 투명 PNG가 좋아요.</p>
+            <div class="row-btns"><label class="btn ghost">올리기<input type="file" accept="image/*" hidden></label><button type="button" class="btn ghost rm">지우기</button></div></div></div>
+          <div class="img-slot" data-asset="cert_slogan"><div class="thumb"></div><div><b>슬로건·로고 (오른쪽 위)</b>
+            <div class="row-btns"><label class="btn ghost">올리기<input type="file" accept="image/*" hidden></label><button type="button" class="btn ghost rm">지우기</button><button type="button" class="btn ghost" data-default="jungnang_slogan.png">중랑 슬로건</button></div></div></div>
+          <div class="img-slot"><div class="thumb seal-thumb">印</div><div><b>직인</b>
+            <div class="row-btns"><select data-k="cert.seal" aria-label="직인"><option value="auto">자동 (마크나 명의로 만듦)</option><option value="image">직인 이미지 쓰기</option><option value="none">찍지 않음</option></select></div></div></div>
+          <div class="img-slot" data-asset="cert_seal" id="sealSlot"><div class="thumb"></div><div><b>직인 이미지</b><p class="hint">'직인 이미지 쓰기'일 때 씁니다.</p>
+            <div class="row-btns"><label class="btn ghost">올리기<input type="file" accept="image/*" hidden></label><button type="button" class="btn ghost rm">지우기</button></div></div></div>
+          <div class="img-slot" data-asset="cert_template"><div class="thumb"></div><div><b>인쇄용 서식 (선택)</b><p class="hint">서식 이미지를 올리면 테두리·워터마크 대신 그 위에 글자만 씁니다.</p>
+            <div class="row-btns"><label class="btn ghost">올리기<input type="file" accept="image/*" hidden></label><button type="button" class="btn ghost rm">지우기</button></div></div></div>
+        </div>
+        <div id="tplBox">
+          <label class="check"><input type="checkbox" data-k="cert.template.noTitle"> 서식에 제목이 이미 인쇄되어 있음 (제목 빼기)</label>
+          <div class="sliders">
+            <label>받는 사람 칸 위치<input type="range" min="-400" max="400" step="5" data-k="cert.template.dy.info"></label>
+            <label>본문 위치<input type="range" min="-400" max="400" step="5" data-k="cert.template.dy.body"></label>
+            <label>날짜 위치<input type="range" min="-400" max="400" step="5" data-k="cert.template.dy.date"></label>
+            <label>명의·직인 위치<input type="range" min="-400" max="400" step="5" data-k="cert.template.dy.sign"></label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. 만들기 / 저장 -->
+    <section class="step card" data-step="5" hidden>
+      <div id="createBox">
+        <h2>만들기</h2>
+        <ul class="summary" id="summary"></ul>
+        <div class="field"><label class="f" for="pw">행사 만들기 비밀번호</label><input type="password" id="pw" autocomplete="current-password"><p class="hint">담당 부서에서 받은 공용 비밀번호예요.</p></div>
+        <p class="err" id="createErr" role="alert"></p>
+        <button type="button" class="btn primary big" id="createBtn">행사 만들기</button>
+      </div>
+      <div id="editBox" hidden>
+        <h2>저장·관리</h2>
+        <ul class="summary" id="summary2"></ul>
+        <button type="button" class="btn primary big" id="saveBtn">저장</button>
+        <div id="linksEdit"></div>
+        <details class="danger-zone"><summary>행사 삭제</summary><p class="hint">행사·명단·모든 출석 기록이 바로 지워지고 되돌릴 수 없어요. (그냥 두어도 마지막으로 쓴 날부터 10일 뒤 자동으로 지워집니다)</p><button type="button" class="btn danger" id="delBtn">행사 삭제</button></details>
+      </div>
+      <div id="doneBox" hidden></div>
+    </section>
+
+    <div class="nav-btns" id="navBtns"><button type="button" class="btn ghost" id="prev">이전</button><button type="button" class="btn primary" id="next">다음</button></div>
+  </main>
+
+  <aside class="preview-col" aria-label="미리보기">
+    <div class="pv-tabs" role="tablist">
+      <button type="button" role="tab" data-pv="screen" aria-selected="true">출석 화면</button>
+      <button type="button" role="tab" data-pv="join">휴대폰</button>
+      <button type="button" role="tab" data-pv="cert">위촉장</button>
+    </div>
+    <div class="pv" data-pv="screen"><div class="pv-screen"><iframe id="pvScreen" title="출석 화면 미리보기" src="screen.html?preview=1" tabindex="-1"></iframe></div><p class="hint">예시 이름이 하나씩 들어오는 모습이에요.</p></div>
+    <div class="pv" data-pv="join" hidden><div class="pv-phone"><iframe id="pvJoin" title="휴대폰 화면 미리보기" src="join.html?preview=1"></iframe></div></div>
+    <div class="pv" data-pv="cert" hidden><canvas id="pvCert" width="1240" height="1754"></canvas><p class="hint" id="pvCertHint"></p></div>
+  </aside>
+</div>
+
+<script src="config.js"></script>
+<script src="assets/qrcode.js"></script>
+<script src="assets/xlsx.full.min.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/cert.js"></script>
+<script src="assets/admin.js"></script>
+</body>
+</html>

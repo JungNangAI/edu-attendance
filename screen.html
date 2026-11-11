@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>출석 화면</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/common.css">
+<link rel="stylesheet" href="assets/screen.css">
+<link rel="stylesheet" href="assets/themes.css">
+</head>
+<body class="screen theme-card">
+<div class="bgimg" id="bgimg"></div>
+<header class="s-head">
+  <div class="s-logo" id="logo"></div>
+  <div class="s-title">
+    <span class="chip" id="chip">출석 체크</span>
+    <div class="sub" id="subtitle"></div>
+    <h1 id="title">불러오는 중…</h1>
+  </div>
+  <div class="s-tags"><div id="tag1"></div><div id="tag2"></div></div>
+</header>
+<main class="s-main">
+  <aside class="s-side">
+    <div class="qr-card"><div class="qr-box" id="qr"></div><p id="qrHint"></p></div>
+    <div class="counter">
+      <svg class="ring" viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="42"/><circle class="bar" id="ringBar" cx="50" cy="50" r="42" stroke-dasharray="263.9" stroke-dashoffset="263.9"/></svg>
+      <div><div class="count-num"><b id="count">0</b> <span>/ <span id="total">0</span></span></div><div class="count-unit" id="unit">명 출석</div></div>
+    </div>
+    <div class="session" id="session">—</div>
+  </aside>
+  <section class="board" id="board" aria-label="출석 보드"></section>
+</main>
+<footer class="s-foot"><span id="foot"></span><span id="conn"></span></footer>
+<div class="welcome" id="welcome" aria-live="polite"><div class="w-in"><span class="w-dept" id="wDept"></span><b id="wName"></b><span id="wMsg"></span></div></div>
+<div class="admin-tip idle" id="adminTip">관리 모드 · 출석한 칸을 누르면 출석을 취소할 수 있어요</div>
+<div class="admin-bar idle" id="adminBar" hidden>
+  <button type="button" id="aRename">회차 이름 바꾸기</button>
+  <button type="button" id="aNew" class="warn">새 회차 시작</button>
+  <button type="button" id="aXlsNow">엑셀: 이번 회차</button>
+  <button type="button" id="aXlsAll">엑셀: 전체 출석부</button>
+  <button type="button" id="aFull">전체 화면</button>
+  <button type="button" id="aEdit">설정 고치기</button>
+</div>
+<div class="msg-full" id="full" hidden></div>
+<script src="config.js"></script>
+<script src="assets/qrcode.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/sound.js"></script>
+<script src="assets/screen.js"></script>
+</body>
+</html>

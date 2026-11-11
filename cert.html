@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>위촉장 받기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;600;700&family=Nanum+Myeongjo:wght@400;700;800&display=swap">
+<link rel="stylesheet" href="assets/common.css">
+<style>
+.head{background:var(--accent);color:var(--on-accent);padding:24px 16px 22px;position:relative}
+.head .wrap{display:flex;align-items:center;gap:16px}
+.head .t{flex:1;min-width:0}
+.head .eyebrow{font-size:13px;opacity:.85;letter-spacing:.04em}
+.head h1{font-family:var(--f-display);font-size:30px;margin:4px 0}
+.head p{margin:0;opacity:.85;font-size:15px}
+.head img{max-height:52px;max-width:200px;object-fit:contain}
+.tri{display:flex;height:6px}.tri i{flex:1}.tri i:nth-child(1){background:#106A3A}.tri i:nth-child(2){background:#9E1C84}.tri i:nth-child(3){background:#0057A3}
+.grid{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:24px;align-items:start}
+.field{margin-bottom:14px}
+.sheet{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);text-align:center}
+.sheet canvas,.sheet img{width:100%;max-width:560px;height:auto;display:block;margin:0 auto;border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,.12)}
+.sheet img{animation:pop .6s cubic-bezier(.2,1.4,.4,1)}
+@keyframes pop{from{transform:scale(.92);opacity:0}}
+.cap{font-size:13px;color:var(--muted);margin:10px 0 0}
+.done h2{font-size:20px;margin-bottom:6px;color:var(--ok)}
+.done .row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.done .row .btn{flex:1}
+.prefill{font-size:14px;color:var(--ok);background:var(--ok-soft);border-radius:10px;padding:8px 12px;margin:0 0 14px}
+.err{color:var(--bad);font-size:14px;min-height:1em;margin:4px 0 10px}
+.full{padding:40px 20px;text-align:center}
+@media (max-width:760px){.grid{grid-template-columns:1fr}.head h1{font-size:25px}}
+</style>
+</head>
+<body>
+<header class="head"><div class="wrap"><div class="t"><div class="eyebrow" id="eyebrow"></div><h1 id="h1">위촉장 받기</h1><p id="lead"></p></div><div id="logo"></div></div></header>
+<div class="tri" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="page"><div class="wrap">
+  <div class="grid" id="main" hidden>
+    <div>
+      <form class="card" id="form" novalidate>
+        <div id="pickBox" class="field" hidden>
+          <label class="f" for="pick">출석 명단에서 내 이름</label>
+          <select id="pick"><option value="">이름(부서) 고르기</option></select>
+          <p class="hint">출석한 분만 받을 수 있어요.</p>
+        </div>
+        <p class="prefill" id="prefill" hidden>출석 명단에서 가져온 내용입니다. 다르면 고친 뒤 받으세요.</p>
+        <div id="fields"></div>
+        <p class="err" id="err" role="alert"></p>
+        <button type="submit" class="btn primary big" id="go">받기</button>
+      </form>
+      <div class="card done" id="done" hidden>
+        <h2 id="doneTitle"></h2>
+        <p id="doneText" style="margin:0"></p>
+        <div class="row"><button type="button" class="btn primary" id="save">이미지 저장</button><button type="button" class="btn ghost" id="again">다시 만들기</button></div>
+      </div>
+    </div>
+    <section class="sheet" aria-label="미리보기">
+      <canvas id="cv" width="1240" height="1754"></canvas>
+      <img id="result" alt="" hidden>
+      <p class="cap" id="cap">입력하는 대로 미리보기가 바뀝니다.</p>
+    </section>
+  </div>
+  <div class="card full" id="full" hidden></div>
+</div></div>
+<script src="config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/cert.js"></script>
+<script>
+(function(){
+  'use strict';
+  const $ = id => document.getElementById(id), A = window.App, CR = window.CertRender;
+  const eventId = A.query('e');
+  let cfg, cert, roster = [], imgs = {}, issued = null, picked = null;
+
+  const values = () => Object.fromEntries(cert.fields.map(f => [f.key, ($('f_' + f.key) || {}).value || '']));
+  let pend = 0;
+  function preview(){ clearTimeout(pend); pend = setTimeout(() => CR.render($('cv'), cert, imgs, values(), { sample: true }), 120); }
+  function full(t, m){ $('full').hidden = false; $('main').hidden = true; $('full').innerHTML = `<h2>${A.esc(t)}</h2><p class="hint">${A.esc(m)}</p>`; }
+
+  function fillFrom(p){
+    if (!p) return;
+    cert.fields.forEach(f => { const el = $('f_' + f.key); if (el && p[f.key] != null && p[f.key] !== '') el.value = p[f.key]; });
+    $('prefill').hidden = false; preview();
+  }
+
+  async function onPick(){
+    $('err').textContent = '';
+    const no = +$('pick').value; picked = null;
+    if (!no) return;
+    const ok = await A.rpc('check_attended', { p_id: eventId, p_no: no }).catch(() => false);
+    if (!ok) { $('err').textContent = '이 이름은 출석 기록이 없어요. 출석을 먼저 해 주세요.'; return; }
+    picked = no; fillFrom(roster.find(x => x.no === no));
+  }
+
+  $('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (cert.only_attendees && !picked) { $('err').textContent = '출석 명단에서 내 이름을 골라 주세요.'; return; }
+    const v = values(), miss = cert.fields.filter(f => !String(v[f.key]).trim()).map(f => f.label);
+    if (miss.length) { $('err').textContent = `${A.josa(miss.join(', '), '을', '를')} 입력해 주세요.`; return; }
+    $('go').disabled = true;
+    const c = document.createElement('canvas');
+    await CR.render(c, cert, imgs, v, { at: Date.now() });
+    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+    issued = { blob, name: v.name || Object.values(v).pop() };
+    const img = $('result'); if (img.src) URL.revokeObjectURL(img.src);
+    img.src = URL.createObjectURL(blob); img.alt = `${cert.title} - ${issued.name}`; img.hidden = false; $('cv').hidden = true;
+    $('doneTitle').textContent = `${A.josa(cert.title, '이', '가')} 나왔습니다`;
+    $('doneText').textContent = `${issued.name}님, 축하드립니다.`;
+    $('done').hidden = false; $('form').hidden = true;
+    $('cap').textContent = '휴대폰에서는 이미지를 길게 눌러 사진에 저장할 수도 있습니다.';
+    $('go').disabled = false;
+    A.confetti({ count: 120, colors: ['#c9a227', '#ce1e24', '#106A3A', '#0057A3', '#9E1C84'] });
+  });
+  $('again').addEventListener('click', () => { $('done').hidden = true; $('form').hidden = false; $('result').hidden = true; $('cv').hidden = false; $('cap').textContent = '입력하는 대로 미리보기가 바뀝니다.'; preview(); });
+  $('save').addEventListener('click', () => {
+    if (!issued) return;
+    const url = URL.createObjectURL(issued.blob);
+    A.download(url, `${cert.title}_${issued.name}.png`.replace(/[\\/:*?"<>|]/g, ''));
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  });
+
+  (async function start(){
+    if (!A.ready) return full('준비 중입니다', '담당자에게 말씀해 주세요. (저장소 설정 없음)');
+    if (!eventId) return full('주소가 올바르지 않습니다', '받은 링크로 다시 열어 주세요.');
+    try {
+      const ev = await A.rpc('get_event', { p_id: eventId });
+      if (!ev) return full('행사를 찾을 수 없습니다', '주소가 맞는지 확인해 주세요.');
+      cfg = A.withDefaults(ev.config); cert = cfg.cert; roster = ev.roster || [];
+      if (!cert.enabled) return full('받을 수 있는 증서가 없습니다', '이 행사는 위촉장(수료증)을 쓰지 않습니다.');
+      cert.fields = (cert.fields || []).filter(f => f && f.label);
+      A.applyColors(document.documentElement, '#f4f6fa', cfg.screen.accent);
+      document.title = `${cert.title} 받기 · ${cfg.title}`;
+      $('eyebrow').textContent = [cfg.org, cfg.title].filter(Boolean).join(' · ');
+      $('h1').textContent = `${cert.title} 받기`;
+      $('lead').textContent = `정보를 확인하고 받기를 누르면 내 이름이 들어간 ${cert.title} 이미지가 나옵니다.`;
+      $('go').textContent = `${cert.title} 받기`;
+      const keys = ['cert_mark', 'cert_seal', 'cert_slogan', 'cert_template', 'logo'].filter(k => ev.assets.includes(k));
+      const am = await A.loadAssets(eventId, keys);
+      if (am.logo) $('logo').innerHTML = `<img src="${am.logo}" alt="">`;
+      imgs = await CR.images(am);
+      $('fields').innerHTML = cert.fields.map(f => `<div class="field"><label class="f" for="f_${f.key}">${A.esc(f.label)}</label><input type="text" id="f_${f.key}" maxlength="40"></div>`).join('');
+      cert.fields.forEach(f => $('f_' + f.key).addEventListener('input', () => { $('err').textContent = ''; preview(); }));
+      const p = roster.find(x => x.no === +A.query('p'));
+      if (cert.only_attendees) {
+        $('pickBox').hidden = false;
+        $('pick').innerHTML += roster.map(x => `<option value="${x.no}">${A.esc(x.name)} (${A.esc(x.dept)})</option>`).join('');
+        $('pick').addEventListener('change', onPick);
+        if (p) { $('pick').value = p.no; await onPick(); }
+      } else if (p) fillFrom(p);
+      $('main').hidden = false;
+      preview();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(preview);
+    } catch (e) { full('불러오지 못했습니다', e.message); }
+  })();
+})();
+</script>
+</body>
+</html>
