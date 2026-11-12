@@ -18,7 +18,7 @@ create table if not exists events (
   id              uuid primary key default gen_random_uuid(),
   admin_hash      text not null,                 -- 관리 열쇠(토큰)의 해시. 토큰 원문은 저장하지 않음
   config          jsonb not null,                -- 행사 설정(문구·색·테마·위촉장 설정)
-  roster          jsonb not null,                -- 명단 [{no, dept, rank, name}] (전화번호 등은 저장하지 않음)
+  roster          jsonb not null,                -- 명단 [{no, dept, rank, name}] (누구나 읽음. 전화번호는 아래 phones 칸에 따로)
   current_session uuid,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
@@ -41,6 +41,12 @@ create table if not exists attendance (
   primary key (session_id, person_no)            -- 한 회차에 한 사람 한 번
 );
 create index if not exists attendance_event on attendance(event_id);
+
+-- 입실·퇴실과 연락처 (나중에 추가된 칸. 예전에 만든 저장소에도 이 SQL을 다시 실행하면 붙는다)
+alter table events     add column if not exists phones jsonb not null default '{}'::jsonb;  -- {연번: 전화번호} 관리 열쇠로만 읽음
+alter table sessions   add column if not exists mode text not null default 'in';             -- 'in' 입실 받는 중, 'out' 퇴실 받는 중
+alter table attendance add column if not exists out_at timestamptz;                           -- 퇴실 시각
+alter table attendance alter column at drop not null;                                         -- 입실 없이 퇴실만 한 경우 비어 있음
 
 create table if not exists assets (              -- 올린 이미지(로고·배경·직인 등). 브라우저에서 줄여 data URL로 저장
   event_id uuid not null references events(id) on delete cascade,
@@ -103,13 +109,21 @@ language sql immutable as $$
   where trim(coalesce(x->>'name','')) <> '';
 $$;
 
+-- 명단에서 전화번호만 뽑는다 {"연번": "010-…"}. 숫자·+·- 만 남기고 20자까지
+create or replace function _phones(p jsonb) returns jsonb
+language sql immutable as $$
+  select coalesce(jsonb_object_agg((x->>'no'), left(regexp_replace(x->>'phone', '[^0-9+-]', '', 'g'), 20)), '{}'::jsonb)
+  from jsonb_array_elements(p) x
+  where trim(coalesce(x->>'name','')) <> '' and regexp_replace(coalesce(x->>'phone',''), '[^0-9]', '', 'g') <> '';
+$$;
+
 create or replace function _event_payload(e events) returns jsonb
 language sql security definer set search_path = public, extensions as $$
   select jsonb_build_object(
     'id', e.id,
     'config', e.config,
     'roster', e.roster,
-    'session', (select jsonb_build_object('id', s.id, 'label', s.label, 'started_at', s.started_at)
+    'session', (select jsonb_build_object('id', s.id, 'label', s.label, 'started_at', s.started_at, 'mode', s.mode)
                 from sessions s where s.id = e.current_session),
     'assets', coalesce((select jsonb_agg(a.key) from assets a where a.event_id = e.id), '[]'::jsonb),
     'expires_at', e.expires_at);
@@ -129,8 +143,8 @@ begin
   if jsonb_array_length(r) = 0 then raise exception '명단이 비어 있습니다'; end if;
   if jsonb_array_length(r) > 2000 then raise exception '명단은 2000명까지입니다'; end if;
   tok := encode(gen_random_bytes(18), 'hex');
-  insert into events(admin_hash, config, roster, expires_at)
-    values (encode(digest(tok, 'sha256'), 'hex'), p_config, r, now() + _keep()) returning id into new_id;
+  insert into events(admin_hash, config, roster, phones, expires_at)
+    values (encode(digest(tok, 'sha256'), 'hex'), p_config, r, _phones(p_roster), now() + _keep()) returning id into new_id;
   insert into sessions(event_id, label)
     values (new_id, coalesce(nullif(trim(p_config->>'first_session'), ''), '1회차')) returning id into sid;
   update events set current_session = sid where id = new_id;
@@ -154,28 +168,35 @@ $$;
 
 create or replace function submit_attendance(p_id uuid, p_no int) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
-declare e events; p jsonb; s sessions; prev timestamptz; t timestamptz;
+declare e events; p jsonb; s sessions; prev attendance; t timestamptz; dupblock boolean;
 begin
   select * into e from events where id = p_id and expires_at >= now();
   if e.id is null then return jsonb_build_object('status', 'error', 'message', '행사를 찾을 수 없습니다'); end if;
   select x into p from jsonb_array_elements(e.roster) x where (x->>'no')::int = p_no;
   if p is null then return jsonb_build_object('status', 'error', 'message', '명단에 없는 이름입니다'); end if;
   select * into s from sessions where id = e.current_session;
-  select at into prev from attendance where session_id = s.id and person_no = p_no;
-  if prev is not null then
-    if coalesce((e.config->>'block_duplicate')::boolean, true) then
-      return p || jsonb_build_object('status', 'dup', 'session', s.label, 'at', prev);
-    end if;
-    return p || jsonb_build_object('status', 'ok', 'session', s.label, 'at', prev);
-  end if;
-  insert into attendance(session_id, event_id, person_no) values (s.id, e.id, p_no)
-    on conflict do nothing returning at into t;
+  select * into prev from attendance where session_id = s.id and person_no = p_no;
+  dupblock := coalesce((e.config->>'block_duplicate')::boolean, true);
   update events set expires_at = now() + _keep() where id = e.id;   -- 출석한 날도 쓴 날로 친다
-  if t is null then
-    select at into t from attendance where session_id = s.id and person_no = p_no;
-    return p || jsonb_build_object('status', 'dup', 'session', s.label, 'at', t);
+  if s.mode = 'out' then
+    -- 퇴실 받는 중
+    if prev.out_at is not null then
+      return p || jsonb_build_object('status', case when dupblock then 'dup' else 'ok' end, 'kind', 'out',
+                                     'session', s.label, 'at', prev.out_at, 'in_at', prev.at);
+    end if;
+    insert into attendance(session_id, event_id, person_no, at, out_at) values (s.id, e.id, p_no, null, now())
+      on conflict (session_id, person_no) do update set out_at = coalesce(attendance.out_at, excluded.out_at)
+      returning out_at into t;
+    return p || jsonb_build_object('status', 'ok', 'kind', 'out', 'session', s.label, 'at', t, 'in_at', prev.at);
   end if;
-  return p || jsonb_build_object('status', 'ok', 'session', s.label, 'at', t);
+  -- 입실 받는 중
+  if prev.at is not null then
+    return p || jsonb_build_object('status', case when dupblock then 'dup' else 'ok' end, 'kind', 'in', 'session', s.label, 'at', prev.at);
+  end if;
+  insert into attendance(session_id, event_id, person_no, at) values (s.id, e.id, p_no, now())
+    on conflict (session_id, person_no) do update set at = coalesce(attendance.at, excluded.at)
+    returning at into t;
+  return p || jsonb_build_object('status', 'ok', 'kind', 'in', 'session', s.label, 'at', t);
 end $$;
 
 create or replace function get_board(p_id uuid) returns jsonb
@@ -186,16 +207,21 @@ begin
   if e.id is null then return null; end if;
   select * into s from sessions where id = e.current_session;
   return jsonb_build_object(
-    'session', jsonb_build_object('id', s.id, 'label', s.label, 'started_at', s.started_at),
+    'session', jsonb_build_object('id', s.id, 'label', s.label, 'started_at', s.started_at, 'mode', s.mode),
     'updated_at', e.updated_at,
     'list', coalesce((select jsonb_agg(jsonb_build_object('no', a.person_no, 'at', a.at) order by a.at)
-                      from attendance a where a.session_id = s.id), '[]'::jsonb));
+                      from attendance a where a.session_id = s.id and a.at is not null), '[]'::jsonb),
+    'outs', coalesce((select jsonb_agg(jsonb_build_object('no', a.person_no, 'at', a.out_at) order by a.out_at)
+                      from attendance a where a.session_id = s.id and a.out_at is not null), '[]'::jsonb));
 end $$;
 
 -- 위촉장 "출석한 사람만"일 때: 이 행사의 어느 회차든 출석했는지
+-- "입실·퇴실 모두 한 사람만"(only_attendees = 'inout')이면 한 회차에서 입실과 퇴실을 모두 했는지
 create or replace function check_attended(p_id uuid, p_no int) returns boolean
 language sql security definer set search_path = public, extensions as $$
-  select exists(select 1 from attendance where event_id = p_id and person_no = p_no);
+  select case when (select config->'cert'->>'only_attendees' from events where id = p_id) = 'inout'
+    then exists(select 1 from attendance where event_id = p_id and person_no = p_no and at is not null and out_at is not null)
+    else exists(select 1 from attendance where event_id = p_id and person_no = p_no and at is not null) end;
 $$;
 
 -- ---------- 관리 함수 (관리 열쇠가 있어야 함) ----------
@@ -210,12 +236,14 @@ end $$;
 
 create or replace function update_event(p_id uuid, p_token text, p_config jsonb, p_roster jsonb) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
-declare e events; r jsonb;
+declare e events; r jsonb; ph jsonb;
 begin
   e := _admin(p_id, p_token);
   r := case when p_roster is null then e.roster else _clean_roster(p_roster) end;
   if jsonb_array_length(r) = 0 then raise exception '명단이 비어 있습니다'; end if;
-  update events set config = coalesce(p_config, config), roster = r, updated_at = now(),
+  -- 새 명단에 전화번호가 하나도 없으면 예전 번호를 그대로 둔다
+  ph := case when p_roster is null or _phones(p_roster) = '{}'::jsonb then e.phones else _phones(p_roster) end;
+  update events set config = coalesce(p_config, config), roster = r, phones = ph, updated_at = now(),
          expires_at = now() + _keep()
    where id = p_id returning * into e;
   return _event_payload(e);
@@ -266,7 +294,13 @@ create or replace function cancel_attendance(p_id uuid, p_token text, p_no int) 
 language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform _admin(p_id, p_token);
-  delete from attendance where session_id = (select current_session from events where id = p_id) and person_no = p_no;
+  if (select s.mode from sessions s join events e on e.current_session = s.id where e.id = p_id) = 'out' then
+    update attendance set out_at = null
+     where session_id = (select current_session from events where id = p_id) and person_no = p_no;
+    delete from attendance where session_id = (select current_session from events where id = p_id) and person_no = p_no and at is null and out_at is null;
+  else
+    delete from attendance where session_id = (select current_session from events where id = p_id) and person_no = p_no;
+  end if;
   return get_board(p_id);
 end $$;
 
@@ -277,8 +311,28 @@ begin
   return jsonb_build_object(
     'sessions', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'label', label, 'started_at', started_at) order by started_at)
                           from sessions where event_id = p_id), '[]'::jsonb),
-    'attendance', coalesce((select jsonb_agg(jsonb_build_object('session_id', session_id, 'no', person_no, 'at', at) order by at)
+    'attendance', coalesce((select jsonb_agg(jsonb_build_object('session_id', session_id, 'no', person_no, 'at', at, 'out_at', out_at) order by coalesce(at, out_at))
                             from attendance where event_id = p_id), '[]'::jsonb));
+end $$;
+
+-- 입실/퇴실 받기 바꾸기
+create or replace function set_mode(p_id uuid, p_token text, p_mode text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform _admin(p_id, p_token);
+  if p_mode not in ('in', 'out') then raise exception '잘못된 값'; end if;
+  update sessions set mode = p_mode where id = (select current_session from events where id = p_id);
+  update events set expires_at = now() + _keep() where id = p_id;
+  return get_board(p_id);
+end $$;
+
+-- 전화번호 (관리 열쇠가 있어야만 읽힘)
+create or replace function get_phones(p_id uuid, p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events;
+begin
+  e := _admin(p_id, p_token);
+  return e.phones;
 end $$;
 
 create or replace function delete_event(p_id uuid, p_token text) returns boolean
@@ -315,7 +369,8 @@ begin
     'create_event(text,jsonb,jsonb)', 'get_event(uuid)', 'get_asset(uuid,text)', 'submit_attendance(uuid,int)',
     'get_board(uuid)', 'check_attended(uuid,int)', 'check_admin(uuid,text)', 'update_event(uuid,text,jsonb,jsonb)',
     'set_asset(uuid,text,text,text)', 'new_session(uuid,text,text)', 'rename_session(uuid,text,text)',
-    'cancel_attendance(uuid,text,int)', 'export_all(uuid,text)', 'delete_event(uuid,text)']
+    'cancel_attendance(uuid,text,int)', 'export_all(uuid,text)', 'delete_event(uuid,text)',
+    'set_mode(uuid,text,text)', 'get_phones(uuid,text)']
   loop
     if exists (select 1 from pg_roles where rolname = 'anon') then
       execute format('grant execute on function %s to anon', f);

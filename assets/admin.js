@@ -85,7 +85,7 @@
   function renderSummary() {
     const c = state.config, items = [
       ['행사', c.title || '(없음)'], ['명단', state.roster.length + '명'], ['테마', (A.THEMES[c.screen.theme] || {}).label],
-      ['증서', c.cert.enabled ? `${c.cert.title} · ${c.cert.only_attendees ? '출석한 사람만' : '누구나'}` : '쓰지 않음']
+      ['증서', c.cert.enabled ? `${c.cert.title} · ${c.cert.only_attendees === 'inout' ? '입실·퇴실 모두 한 사람만' : c.cert.only_attendees ? '출석한 사람만' : '누구나'}` : '쓰지 않음']
     ];
     if (EDIT && expiresAt) items.push(['자동 삭제 예정', new Date(expiresAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ' (출석·새 회차·저장할 때마다 10일씩 늦춰져요)']);
     const html = items.map(([k, v]) => `<li>${k}: <b>${A.esc(v)}</b></li>`).join('') + problems().map(([n, m]) => `<li style="color:var(--bad)">${n}단계: ${A.esc(m)}</li>`).join('');
@@ -96,7 +96,8 @@
   let sheet = null;  // {headers, data}
   const KEYS = {
     no: /^(연\s*번|번\s*호|순\s*번|순|no\.?)$/i, name: /^(성\s*명|이\s*름|성함|name)$/i,
-    dept: /(부서|소속|기관|과\s*명|팀명|department)/i, rank: /(직위|직급|직렬|직책|rank|title)/i
+    dept: /(부서|소속|기관|과\s*명|팀명|department)/i, rank: /(직위|직급|직렬|직책|rank|title)/i,
+    phone: /(전화|휴대|연락처|핸드폰|폰|phone|mobile|tel)/i
   };
   function readRows(rows) {
     rows = rows.map(r => (r || []).map(c => String(c ?? '').trim()));
@@ -120,7 +121,7 @@
     const m = Object.fromEntries($$('[data-map]').map(s => [s.dataset.map, +s.value]));
     const cell = (r, k) => m[k] >= 0 ? String(r[m[k]] || '').trim() : '';
     let skipped = 0;
-    let list = sheet.data.map(r => ({ no: parseInt(cell(r, 'no'), 10), dept: cell(r, 'dept'), rank: cell(r, 'rank'), name: cell(r, 'name') }))
+    let list = sheet.data.map(r => ({ no: parseInt(cell(r, 'no'), 10), dept: cell(r, 'dept'), rank: cell(r, 'rank'), name: cell(r, 'name'), phone: cell(r, 'phone') }))
       .filter(p => { if (!p.name) { skipped++; return false; } return true; });
     const nos = list.map(p => p.no);
     if (nos.some(n => !Number.isFinite(n)) || new Set(nos).size !== nos.length) list = list.map((p, i) => ({ ...p, no: i + 1 }));
@@ -138,8 +139,10 @@
     const dup = Object.keys(names).filter(n => names[n] > 1);
     $('rosterInfo').innerHTML = r.length ? `<div class="ok-box"><b>${r.length}명</b>을 읽었어요.${skipped ? ` 이름이 빈 줄 ${skipped}개는 뺐어요.` : ''}
       ${dup.length ? `<br>동명이인: ${dup.map(A.esc).join(', ')} — 휴대폰에서 부서와 함께 보여서 구분돼요.` : ''}</div>` : '';
-    $('rosterTable').innerHTML = r.length ? `<thead><tr><th>연번</th><th>부서명</th><th>직위(직급)</th><th>성명</th></tr></thead><tbody>` +
-      r.map(p => `<tr><td>${p.no}</td><td>${A.esc(p.dept)}</td><td>${A.esc(p.rank)}</td><td>${A.esc(p.name)}</td></tr>`).join('') + '</tbody>' : '';
+    const ph = r.some(p => p.phone), nPh = r.filter(p => p.phone).length;
+    if (r.length && ph) $('rosterInfo').firstElementChild.insertAdjacentHTML('beforeend', `<br>연락처 ${nPh}명 — 관리 링크로 연 화면(미참석자 확인)에서만 보이고, 참석자 휴대폰에는 나오지 않아요.`);
+    $('rosterTable').innerHTML = r.length ? `<thead><tr><th>연번</th><th>부서명</th><th>직위(직급)</th><th>성명</th>${ph ? '<th>연락처</th>' : ''}</tr></thead><tbody>` +
+      r.map(p => `<tr><td>${p.no}</td><td>${A.esc(p.dept)}</td><td>${A.esc(p.rank)}</td><td>${A.esc(p.name)}</td>${ph ? `<td>${A.esc(p.phone || '')}</td>` : ''}</tr>`).join('') + '</tbody>' : '';
   }
   $$('[data-map]').forEach(s => s.addEventListener('change', e => { e.stopPropagation(); applyMapping(); }));
   async function readFile(f) {
@@ -417,6 +420,7 @@
       if (!ev) throw new Error('행사를 찾을 수 없어요 (마지막으로 쓴 날부터 10일이 지나 자동으로 지워졌을 수 있어요)');
       if (!token || !await A.rpc('check_admin', { p_id: eventId, p_token: token })) throw new Error('관리 링크로 열어야 고칠 수 있어요. 처음 만들 때 받은 관리 링크를 써 주세요.');
       state.config = A.withDefaults(ev.config); state.roster = ev.roster; expiresAt = ev.expires_at;
+      try { const ph = await A.rpc('get_phones', { p_id: eventId, p_token: token }) || {}; state.roster = state.roster.map(p => ({ ...p, phone: ph[p.no] || '' })); } catch (e) {}
       state.assets = await A.loadAssets(eventId, ev.assets);
       $('pageTitle').textContent = state.config.title;
       initUi();

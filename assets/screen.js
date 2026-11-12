@@ -9,6 +9,8 @@
   let cfg = A.withDefaults({}), roster = [], byNo = new Map(), assets = {};
   let token = null, isAdmin = false;
   let sessionId = null, sessionLabel = '', lastList = [], updatedAt = null;
+  let mode = 'in', lastOuts = [], outSet = new Set(), phones = {};   // 입실/퇴실, 퇴실한 사람, 연락처(관리 화면만)
+  const isOutMode = () => mode === 'out';
   let displayed = [], queue = [], slots = [], theme = 'card', running = false;
   let shownCount = 0, msDone = 0;   // msDone: 이미 축하한 가장 높은 출석률(%)
   const MILESTONES = [50, 60, 70, 80, 90, 100];
@@ -443,14 +445,19 @@
     slots.forEach(s => s.addEventListener('click', () => onSlotClick(s)));
     displayed.forEach((no, i) => { const p = byNo.get(no); if (p && slots[i]) { impl.fill(slots[i], p); slots[i].classList.add('on'); slots[i].dataset.no = no; } });
     if (impl.after) impl.after(board);
-    markCancelable();
+    markCancelable(); markLeft();
   }
   function markCancelable() { slots.forEach(s => s.classList.toggle('cancel-ok', isAdmin && !!s.dataset.no)); }
+  // 퇴실 받는 중: 퇴실한 사람 칸은 불이 꺼진다
+  function markLeft() { slots.forEach(s => s.classList.toggle('gone', isOutMode() && !!s.dataset.no && outSet.has(+s.dataset.no))); }
 
   function setCount(n, animate) {
-    const total = roster.length || 1, from = shownCount; shownCount = n;
-    Sound.setEnergy(roster.length ? n / roster.length : 0);
-    $('total').textContent = roster.length;
+    const out = isOutMode();
+    if (out) n = displayed.filter(no => outSet.has(no)).length;
+    const total = (out ? displayed.length : roster.length) || 1, from = shownCount; shownCount = n;
+    Sound.setEnergy(roster.length ? displayed.length / roster.length : 0);
+    $('total').textContent = out ? displayed.length : roster.length;
+    $('unit').textContent = out ? '명 퇴실' : (cfg.screen.texts.unit || '명 출석');
     const bar = $('ringBar'), C = 2 * Math.PI * 42;
     bar.style.strokeDashoffset = C * (1 - Math.min(1, n / total));
     const b = $('count');
@@ -467,7 +474,7 @@
     $('wDept').textContent = done ? '' : p.dept;
     $('wName').textContent = done ? cfg.screen.texts.done : p.name;
     const st = !done && p && p.dept ? deptStat(p.dept) : null;   // 소속감: 우리 부서 몇 명째인지
-    $('wMsg').textContent = done ? '' : cfg.screen.texts.welcome + (st && st.t > 1 ? `  ·  ${p.dept} ${st.a}/${st.t}명` : '');
+    $('wMsg').textContent = done ? '' : done === false ? ' 님 수고하셨습니다' : cfg.screen.texts.welcome + (st && st.t > 1 ? `  ·  ${p.dept} ${st.a}/${st.t}명` : '');
     w.classList.add('show');
     clearTimeout(bannerTimer); bannerTimer = setTimeout(() => w.classList.remove('show'), done ? 4200 : 2600);
   }
@@ -545,8 +552,46 @@
     const joinUrl = PREVIEW ? 'https://example.github.io/edu-attendance/join.html?e=preview' : A.links(eventId).join;
     $('qr').innerHTML = A.qrSvg(joinUrl);
     $('qr').title = joinUrl;
+    modeBtn();
   }
-  function setSession(s) { sessionId = s.id; sessionLabel = s.label; $('session').textContent = s.label; }
+  function setSession(s) { sessionId = s.id; sessionLabel = s.label; $('session').textContent = s.label + (isOutMode() ? ' · 퇴실 받는 중' : ''); }
+  // 입실/퇴실 받기 화면 바꾸기
+  function applyMode(m) {
+    mode = m === 'out' ? 'out' : 'in';
+    document.body.classList.toggle('mode-out', isOutMode());
+    const t = cfg.screen.texts;
+    $('chip').textContent = isOutMode() ? '퇴실 체크' : (t.chip || '출석 체크');
+    $('qrHint').textContent = isOutMode() ? '수업이 끝났어요. QR을 찍고 퇴실해 주세요' : (t.qr_hint || '');
+    if (sessionLabel) $('session').textContent = sessionLabel + (isOutMode() ? ' · 퇴실 받는 중' : '');
+    modeBtn();
+    markLeft(); setCount(displayed.length, false);
+  }
+  // 퇴실 체크를 쓰는 행사에서만 버튼을 보인다 (퇴실 받는 중이면 되돌릴 수 있게 항상 보임)
+  function modeBtn() {
+    const b = $('aMode'); if (!b) return;
+    b.hidden = !(cfg.screen.checkout === 'on' || isOutMode());
+    b.textContent = isOutMode() ? '입실 받기로 돌아가기' : '퇴실 받기 시작';
+  }
+  // 새로 퇴실한 사람: 칸 불을 끄고 "수고하셨습니다" 배너
+  let leaveQ = [], leaving = false;
+  function applyOuts(outs, animate) {
+    lastOuts = outs;
+    const now = new Set(outs.map(x => x.no));
+    const fresh = outs.map(x => x.no).filter(no => !outSet.has(no));
+    outSet = now;
+    if (animate && isOutMode() && fresh.length) { leaveQ.push(...fresh); if (!leaving) leaveNext(); }
+    else { markLeft(); setCount(displayed.length, false); }
+  }
+  function leaveNext() {
+    if (!leaveQ.length) { leaving = false; markLeft(); setCount(displayed.length, true); return; }
+    leaving = true;
+    const no = leaveQ.shift(), p = byNo.get(no), s = slots.find(x => +x.dataset.no === no);
+    if (s) s.classList.add('gone');
+    if (p) banner(p, false);
+    setCount(displayed.length, true);
+    try { Sound.sfx('phone'); } catch (e) {}
+    setTimeout(leaveNext, leaveQ.length > 3 ? 400 : 1200);
+  }
 
   /* ---------- 저장소에서 가져오기 ---------- */
   let failCount = 0, eventSig = '';
@@ -569,16 +614,22 @@
       }
       updatedAt = b.updated_at;
       const nos = b.list.map(x => x.no); lastList = b.list;
+      const newMode = b.session.mode || 'in';
       if (b.session.id !== sessionId) {
         const had = sessionId !== null;
-        setSession(b.session);
+        outSet = new Set(); leaveQ = [];
+        mode = newMode; setSession(b.session); applyMode(newMode);
         if (had) { $('board').classList.remove('sweep'); void $('board').offsetWidth; $('board').classList.add('sweep'); }
         queue = []; running = false; displayed = []; msDone = 0; buildBoard(); setCount(0, false);
         applyList(nos, had);
+        applyOuts(b.outs || [], false);
       } else {
+        if (newMode !== mode) applyMode(newMode);
         if (b.session.label !== sessionLabel) setSession(b.session);
         applyList(nos, true);
+        applyOuts(b.outs || [], true);
       }
+      if (isAdmin && !$('absent').hidden) renderAbsent();
     } catch (e) {
       failCount++;
       if (failCount >= 2) { $('session').classList.add('off'); $('conn').textContent = '연결이 끊겨 다시 연결하는 중…'; }
@@ -591,7 +642,9 @@
   async function onSlotClick(s) {
     if (!isAdmin || !s.dataset.no) return;
     const p = byNo.get(+s.dataset.no) || { name: '', dept: '' };
-    const ok = await A.dialog({ title: '출석 취소', message: `${p.dept} ${p.name} 님의 이번 회차 출석을 취소할까요?`, ok: '출석 취소', danger: true });
+    if (isOutMode() && !outSet.has(+s.dataset.no)) { A.toast(`${p.name} 님은 아직 퇴실 전이에요. 입실을 취소하려면 먼저 '입실 받기로 돌아가기'를 누르세요.`); return; }
+    const what = isOutMode() ? '퇴실' : '출석';
+    const ok = await A.dialog({ title: what + ' 취소', message: `${p.dept} ${p.name} 님의 이번 회차 ${what}을 취소할까요?`, ok: what + ' 취소', danger: true });
     if (!ok) return;
     try { await A.rpc('cancel_attendance', { p_id: eventId, p_token: token, p_no: +s.dataset.no }); A.toast('취소했습니다'); }
     catch (e) { A.toast(e.message, 'bad'); }
@@ -610,27 +663,79 @@
   async function exportNow() {
     try {
       await needXlsx();
-      const at = new Map(lastList.map(x => [x.no, x.at]));
-      const rows = [[`${cfg.title} 출석 (${sessionLabel})`], [], ['연번', '부서명', '직위(직급)', '성명', '출석', '출석 시각']];
-      roster.forEach(p => rows.push([p.no, p.dept, p.rank, p.name, at.has(p.no) ? 'O' : '', at.has(p.no) ? A.hhmm(at.get(p.no)) : '']));
-      rows.push([], ['', '출석 인원', '', `${at.size}명 / ${roster.length}명`]);
-      saveBook(rows, [6, 22, 14, 10, 6, 10], sessionLabel || '출석', `${fileSafe(cfg.title)}_${fileSafe(sessionLabel)}_출석.xlsx`);
+      const at = new Map(lastList.map(x => [x.no, x.at])), out = new Map(lastOuts.map(x => [x.no, x.at]));
+      const rows = [[`${cfg.title} 출석 (${sessionLabel})`], [], ['연번', '부서명', '직위(직급)', '성명', '출석', '출석 시각', '퇴실 시각']];
+      roster.forEach(p => rows.push([p.no, p.dept, p.rank, p.name, at.has(p.no) ? 'O' : '', at.has(p.no) ? A.hhmm(at.get(p.no)) : '', out.has(p.no) ? A.hhmm(out.get(p.no)) : '']));
+      rows.push([], ['', '출석 인원', '', `${at.size}명 / ${roster.length}명`], ['', '퇴실 인원', '', `${out.size}명`]);
+      saveBook(rows, [6, 22, 14, 10, 6, 10, 10], sessionLabel || '출석', `${fileSafe(cfg.title)}_${fileSafe(sessionLabel)}_출석.xlsx`);
     } catch (e) { A.toast(e.message, 'bad'); }
+  }
+  /* 미참석자: 이번 회차에 아직 입실(또는 퇴실)하지 않은 사람 (담당자 전용) */
+  let abTab = 'in';
+  function absentees(tab = abTab) {
+    const here = new Set(lastList.map(x => x.no));
+    return tab === 'out' ? roster.filter(p => here.has(p.no) && !outSet.has(p.no)) : roster.filter(p => !here.has(p.no));
+  }
+  const telOf = p => phones[p.no] || '';
+  function renderAbsent() {
+    const showOut = isOutMode() || outSet.size > 0;
+    if (!showOut) abTab = 'in';
+    const nIn = absentees('in').length, nOut = absentees('out').length;
+    $('abTabs').hidden = !showOut;
+    $('abTabIn').textContent = `미입실 ${nIn}`; $('abTabOut').textContent = `미퇴실 ${nOut}`;
+    $('abTabIn').classList.toggle('on', abTab === 'in'); $('abTabOut').classList.toggle('on', abTab === 'out');
+    const list = absentees(), groups = new Map();
+    list.forEach(p => { const k = p.dept || '부서 없음'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); });
+    $('abTitle').textContent = abTab === 'out' ? '퇴실 안 한 사람' : '미참석자';
+    $('abN').textContent = abTab === 'out' ? `${list.length}명 / 입실 ${lastList.length}명` : `${list.length}명 / ${roster.length}명`;
+    $('abList').innerHTML = list.length ? [...groups].map(([d, ps]) =>
+      `<h4>${A.esc(d)} (${ps.length})</h4><ul>${ps.map(p => `<li><span>${A.esc(p.name)}${p.rank ? ' · ' + A.esc(p.rank) : ''}</span>${telOf(p) ? `<a href="tel:${A.esc(telOf(p))}">${A.esc(telOf(p))}</a>` : ''}</li>`).join('')}</ul>`).join('')
+      : `<div class="ab-none">${abTab === 'out' ? '입실한 사람 모두 퇴실했습니다' : '모두 출석했습니다'}</div>`;
+  }
+  function toggleAbsent(show) {
+    const el = $('absent'); el.hidden = show === undefined ? !el.hidden : !show;
+    if (!el.hidden) { if (isOutMode()) abTab = 'out'; renderAbsent(); }
+  }
+  async function copyAbsent() {
+    const text = absentees().map(p => [p.dept, p.rank, p.name, telOf(p)].filter(Boolean).join('\t')).join('\n');
+    try { await navigator.clipboard.writeText(text); A.toast('복사했습니다', 'ok'); }
+    catch (e) { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); A.toast('복사했습니다', 'ok'); }
+  }
+  async function exportAbsent() {
+    try {
+      await needXlsx();
+      const list = absentees(), what = abTab === 'out' ? '미퇴실자' : '미참석자';
+      const rows = [[`${cfg.title} ${what} (${sessionLabel})`], [], ['연번', '부서명', '직위(직급)', '성명', '연락처', '연락 결과']];
+      list.forEach(p => rows.push([p.no, p.dept, p.rank, p.name, telOf(p), '']));
+      rows.push([], ['', `${what} 인원`, '', `${list.length}명`]);
+      saveBook(rows, [6, 22, 14, 10, 16, 24], what, `${fileSafe(cfg.title)}_${fileSafe(sessionLabel)}_${what}.xlsx`);
+    } catch (e) { A.toast(e.message, 'bad'); }
+  }
+  async function toggleMode() {
+    const toOut = !isOutMode();
+    const ok = await A.dialog(toOut
+      ? { title: '퇴실 받기 시작', message: '같은 QR을 찍으면 이제 퇴실로 기록됩니다.\n퇴실한 사람의 칸은 불이 꺼져요.', ok: '퇴실 받기 시작' }
+      : { title: '입실 받기로 돌아가기', message: '같은 QR을 찍으면 다시 입실(출석)로 기록됩니다.\n지금까지의 퇴실 기록은 그대로 남아요.', ok: '입실 받기로' });
+    if (!ok) return;
+    try { await A.rpc('set_mode', { p_id: eventId, p_token: token, p_mode: toOut ? 'out' : 'in' }); applyMode(toOut ? 'out' : 'in'); A.toast(toOut ? '퇴실을 받고 있어요' : '입실을 받고 있어요', 'ok'); }
+    catch (e) { A.toast(e.message, 'bad'); }
   }
   async function exportAll() {
     try {
       await needXlsx();
       const d = await A.rpc('export_all', { p_id: eventId, p_token: token });
       const ss = d.sessions, map = new Map();
-      d.attendance.forEach(a => map.set(a.session_id + ':' + a.no, a.at));
+      d.attendance.forEach(a => map.set(a.session_id + ':' + a.no, a));
       const head = ['연번', '부서명', '직위(직급)', '성명', ...ss.map(s => `${s.label} (${A.ymd(s.started_at)})`), '출석 횟수'];
       const rows = [[`${cfg.title} 출석부`], [], head];
       roster.forEach(p => {
-        const marks = ss.map(s => { const t = map.get(s.id + ':' + p.no); return t ? '출석 ' + A.hhmm(t) : ''; });
-        rows.push([p.no, p.dept, p.rank, p.name, ...marks, marks.filter(Boolean).length]);
+        const marks = ss.map(s => { const a = map.get(s.id + ':' + p.no); if (!a) return '';
+          return a.at ? '출석 ' + A.hhmm(a.at) + (a.out_at ? ' / 퇴실 ' + A.hhmm(a.out_at) : '') : '퇴실만 ' + A.hhmm(a.out_at); });
+        rows.push([p.no, p.dept, p.rank, p.name, ...marks, marks.filter(m => m.startsWith('출석')).length]);
       });
-      rows.push([], ['', '회차별 출석 인원', '', '', ...ss.map(s => d.attendance.filter(a => a.session_id === s.id).length + '명')]);
-      saveBook(rows, [6, 22, 14, 10, ...ss.map(() => 18), 9], '출석부', `${fileSafe(cfg.title)}_출석부_전체.xlsx`);
+      rows.push([], ['', '회차별 출석 인원', '', '', ...ss.map(s => d.attendance.filter(a => a.session_id === s.id && a.at).length + '명')],
+        ['', '회차별 퇴실 인원', '', '', ...ss.map(s => d.attendance.filter(a => a.session_id === s.id && a.out_at).length + '명')]);
+      saveBook(rows, [6, 22, 14, 10, ...ss.map(() => 26), 9], '출석부', `${fileSafe(cfg.title)}_출석부_전체.xlsx`);
     } catch (e) { A.toast(e.message, 'bad'); }
   }
   async function newSession() {
@@ -653,6 +758,11 @@
     wake();
     $('aNew').onclick = newSession; $('aRename').onclick = renameSession;
     $('aXlsNow').onclick = exportNow; $('aXlsAll').onclick = exportAll;
+    $('aAbsent').onclick = () => toggleAbsent(); $('abClose').onclick = () => toggleAbsent(false);
+    $('abCopy').onclick = copyAbsent; $('abXls').onclick = exportAbsent;
+    $('abTabIn').onclick = () => { abTab = 'in'; renderAbsent(); }; $('abTabOut').onclick = () => { abTab = 'out'; renderAbsent(); };
+    $('aMode').onclick = toggleMode; modeBtn();
+    A.rpc('get_phones', { p_id: eventId, p_token: token }).then(ph => { phones = ph || {}; if (!$('absent').hidden) renderAbsent(); }).catch(() => {});
     $('aFull').onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {});
     $('aEdit').onclick = () => window.open(A.links(eventId, token).admin, '_blank', 'noopener');
     markCancelable();

@@ -39,11 +39,20 @@
 <div class="admin-bar idle" id="adminBar" hidden>
   <button type="button" id="aRename">회차 이름 바꾸기</button>
   <button type="button" id="aNew" class="warn">새 회차 시작</button>
+  <button type="button" id="aMode" class="mode">퇴실 받기 시작</button>
+  <button type="button" id="aAbsent">미참석자</button>
   <button type="button" id="aXlsNow">엑셀: 이번 회차</button>
   <button type="button" id="aXlsAll">엑셀: 전체 출석부</button>
   <button type="button" id="aFull">전체 화면</button>
   <button type="button" id="aEdit">설정 고치기</button>
 </div>
+<aside class="absent" id="absent" hidden aria-label="미참석자 명단">
+  <header><b><span id="abTitle">미참석자</span> <span id="abN"></span></b><button type="button" id="abClose" aria-label="닫기">✕</button></header>
+  <div class="ab-tabs" id="abTabs" hidden><button type="button" id="abTabIn">미입실</button><button type="button" id="abTabOut">미퇴실</button></div>
+  <p class="ab-note">이번 회차 기준이에요. 출석(퇴실)하면 저절로 빠집니다. 프로젝터에도 보일 수 있으니 확인 후 닫아 주세요.</p>
+  <div class="ab-list" id="abList"></div>
+  <footer><button type="button" id="abCopy">복사</button><button type="button" id="abXls">엑셀로 받기</button></footer>
+</aside>
 <div class="msg-full" id="full" hidden></div>
 <script src="config.js"></script>
 <script src="assets/qrcode.js"></script>

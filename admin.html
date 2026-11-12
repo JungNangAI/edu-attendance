@@ -40,7 +40,7 @@
     <!-- 2. 명단 -->
     <section class="step card" data-step="2" hidden>
       <h2>2. 명단</h2>
-      <p class="hint" style="margin-top:-6px">엑셀 파일을 올리면 이 브라우저 안에서 읽습니다. 연번·부서·직위·성명만 저장하고, 전화번호 같은 다른 칸은 버려요.</p>
+      <p class="hint" style="margin-top:-6px">엑셀 파일을 올리면 이 브라우저 안에서 읽습니다. 연번·부서·직위·성명과 연락처(있으면)만 저장해요. 연락처는 담당자의 관리 화면에서만 보여요.</p>
       <div class="drop" id="drop" tabindex="0" role="button" aria-label="명단 엑셀 파일 올리기">
         <input type="file" id="rosterFile" accept=".xlsx,.xls,.csv" hidden>
         <b>엑셀 파일을 여기에 끌어다 놓거나 눌러서 고르세요</b><span>.xlsx · .xls · .csv</span>
@@ -54,6 +54,7 @@
           <label>부서명<select data-map="dept"></select></label>
           <label>직위(직급)<select data-map="rank"></select></label>
           <label>성명 <em>필수</em><select data-map="name"></select></label>
+          <label>연락처 <em>선택</em><select data-map="phone"></select></label>
         </div>
       </div>
       <div id="rosterInfo"></div>
@@ -80,6 +81,9 @@
         <div class="field"><label class="f" for="cMotion">캐릭터 움직임 세기</label>
           <select id="cMotion" data-k="screen.motion"><option value="calm">차분 — 교육 중에 켜 두기 좋아요 (살랑살랑, 이름 인사만)</option><option value="normal">보통 — 입장·접수 시간에 추천 (가끔 날아오고, 출석률 이벤트)</option><option value="wild">과하게 — 행사 분위기 최고조 (매번 날아오고 폭죽)</option></select>
           <p class="hint">화면 주소 끝에 <code>&amp;motion=calm</code> 처럼 붙이면 그 자리에서 바로 바꿀 수 있어요.</p></div>
+        <div class="field"><label class="f" for="cCheckout">퇴실 체크</label>
+          <select id="cCheckout" data-k="screen.checkout"><option value="off">안 씀 — 입실(출석)만 받아요</option><option value="on">씀 — 수업이 끝날 때 같은 QR로 퇴실도 받아요</option></select>
+          <p class="hint">'씀'을 고르면 강의실 화면 관리 도구에 <b>퇴실 받기 시작</b> 버튼이 생겨요. 엑셀에 퇴실 시각이 함께 나와요.</p></div>
         <div class="field"><label class="f" for="cSound">소리</label>
           <select id="cSound" data-k="screen.sound"><option value="both">효과음 + 배경음악</option><option value="sfx">효과음만</option><option value="off">소리 없음</option></select>
           <p class="hint">강의실 화면 아래의 <b>🔊 소리 켜기</b>를 한 번 눌러야 소리가 나요(브라우저 규칙). 출석할 때마다 효과음이 한 음씩 올라가고, 테마마다 다른 음악이 흘러요. 키보드 M 으로 전체 끄기·켜기. 화면 주소 끝에 <code>&amp;sound=off</code> 도 돼요.</p></div>
@@ -132,7 +136,7 @@
         <div id="fieldList"></div>
         <button type="button" class="btn ghost" id="addField">칸 더하기</button>
         <h3>받을 수 있는 사람</h3>
-        <div class="seg"><label><input type="radio" name="oa" data-k="cert.only_attendees" value="false"> 누구나</label><label><input type="radio" name="oa" data-k="cert.only_attendees" value="true"> 출석한 사람만</label></div>
+        <div class="seg"><label><input type="radio" name="oa" data-k="cert.only_attendees" value="false"> 누구나</label><label><input type="radio" name="oa" data-k="cert.only_attendees" value="true"> 출석한 사람만</label><label><input type="radio" name="oa" data-k="cert.only_attendees" value="inout"> 입실·퇴실 모두 한 사람만 (퇴실 체크를 쓸 때)</label></div>
         <div class="two">
           <div class="field"><label class="f">출석 화면 버튼 글자</label><input type="text" data-k="cert.button" maxlength="16"></div>
           <div class="field"><label class="f">테두리</label><select data-k="cert.border"><option value="gold">금색 이중선</option><option value="line">한 줄</option><option value="none">없음</option></select></div>

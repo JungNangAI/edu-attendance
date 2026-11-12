@@ -7,7 +7,7 @@
   const DEFAULT_CONFIG = {
     title: '', subtitle: '', org: '', first_session: '1회차', block_duplicate: true,
     screen: {
-      theme: 'card', bg: '#f5f6fa', accent: '#212b46', bg_image: 'soft', characters: true, motion: 'normal', sound: 'both',
+      theme: 'card', bg: '#f5f6fa', accent: '#212b46', bg_image: 'soft', characters: true, motion: 'normal', sound: 'both', checkout: 'off',
       texts: {
         chip: '출석 체크', qr_hint: '휴대폰 카메라로 QR을 찍고\n내 이름을 고르세요', welcome: '님 환영합니다',
         unit: '명 출석', foot: '제출하면 몇 초 안에 화면에 이름이 나옵니다.', tag1: '', tag2: '', done: '모두 출석했습니다!', cheer: '환영해요!'

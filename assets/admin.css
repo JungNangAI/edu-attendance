@@ -21,6 +21,7 @@ body{background:#f4f6fa}
 .step h3{font-size:16px;margin:22px 0 10px;color:var(--ink)}
 .field{margin-bottom:14px}
 .field label.f em,.map-grid em{font-style:normal;color:var(--bad);font-size:12px;margin-left:4px}
+.map-grid label:last-child em{color:var(--muted)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
 .check{display:flex;align-items:center;gap:10px;font-size:15px;margin:6px 0;cursor:pointer}
 .check input{width:20px;height:20px;accent-color:var(--accent)}
@@ -34,7 +35,7 @@ body{background:#f4f6fa}
 .drop{border:2px dashed var(--line);border-radius:14px;padding:26px 16px;text-align:center;cursor:pointer;display:flex;flex-direction:column;gap:4px;transition:.2s;background:#fafbfd}
 .drop span{font-size:13px;color:var(--muted)}
 .drop:hover,.drop.over{border-color:var(--accent);background:var(--soft)}
-.map-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.map-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
 .map-grid label{font-size:13px;font-weight:600;display:flex;flex-direction:column;gap:4px}
 .map-grid select{font-size:14px;padding:8px}
 .table-wrap{overflow:auto;max-height:340px;border-radius:10px;margin-top:10px}

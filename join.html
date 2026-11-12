@@ -89,10 +89,11 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
     cfg = A.withDefaults(ev.config); roster = ev.roster || []; session = ev.session;
     A.applyColors(document.documentElement, cfg.screen.bg, cfg.screen.accent);
     document.title = (cfg.join.title || '출석') + ' · ' + (cfg.title || '');
-    $('title').textContent = cfg.join.title || '출석 체크';
+    const out = session && session.mode === 'out';
+    $('title').textContent = out ? '퇴실 체크' : (cfg.join.title || '출석 체크');
     $('subtitle').textContent = [cfg.subtitle, cfg.title].filter(Boolean).join(' · ');
     $('logo').innerHTML = assets && assets.logo ? `<img src="${assets.logo}" alt="">` : '';
-    $('session').textContent = session ? session.label : '';
+    $('session').textContent = session ? session.label + (out ? ' · 퇴실' : '') : '';
     renderList('');
   }
   function renderList(q){
@@ -107,22 +108,25 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
   $('q').addEventListener('input', e => renderList(e.target.value));
   $('list').addEventListener('change', e => {
     chosen = +e.target.value; const p = roster.find(x => x.no === chosen);
-    $('go').disabled = false; $('go').textContent = `${p.name} 님으로 출석`; $('err').textContent = '';
+    $('go').disabled = false; $('go').textContent = `${p.name} 님으로 ${isOut() ? '퇴실' : '출석'}`; $('err').textContent = '';
   });
 
+  const isOut = () => !!(session && session.mode === 'out');
+  const doneKey = kind => 'done:' + (session && session.id) + (kind === 'out' ? ':out' : '');
   function certUrl(p){ return A.siteBase() + 'cert.html?e=' + encodeURIComponent(eventId || 'preview') + '&p=' + p.no; }
   function showResult(r){
-    const dup = r.status === 'dup';
+    const dup = r.status === 'dup', out = r.kind === 'out';
+    const certOk = cfg.cert.enabled && (cfg.cert.only_attendees !== 'inout' || out);
     $('result').className = 'panel result' + (dup ? ' dup' : '');
     $('result').innerHTML = `<svg class="check" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="45"/><path d="M30 52l13 13 27-29"/></svg>
-      <h2>${A.esc(dup ? '이미 출석했습니다' : cfg.join.ok_title)}</h2>
+      <h2>${A.esc(out ? (dup ? '이미 퇴실했습니다' : '퇴실했습니다') : (dup ? '이미 출석했습니다' : cfg.join.ok_title))}</h2>
       <div class="who-line">${A.esc(r.dept)} ${A.esc(r.name)} 님</div>
-      <p class="meta">${A.esc(r.session || '')} · ${r.at ? A.hhmm(r.at) : ''} ${dup ? '제출' : '출석'}</p>
-      ${dup ? '' : `<p class="hint2">${A.esc(cfg.join.ok_hint)}</p>`}
-      ${cfg.cert.enabled ? `<a class="btn primary big" href="${certUrl(r)}" target="_blank" rel="noopener">${A.esc(cfg.cert.button || '위촉장 받기')}</a>` : ''}
+      <p class="meta">${A.esc(r.session || '')} · ${out && r.in_at ? A.hhmm(r.in_at) + ' 입실 · ' : ''}${r.at ? A.hhmm(r.at) : ''} ${out ? '퇴실' : dup ? '제출' : '출석'}</p>
+      ${dup ? '' : out ? `<p class="hint2">${r.in_at ? '오늘도 수고하셨습니다!' : '입실 기록이 없어요. 담당자에게 말씀해 주세요.'}</p>` : `<p class="hint2">${A.esc(cfg.join.ok_hint)}</p>`}
+      ${certOk ? `<a class="btn primary big" href="${certUrl(r)}" target="_blank" rel="noopener">${A.esc(cfg.cert.button || '위촉장 받기')}</a>` : ''}
       <br><button type="button" class="again" id="again">내 이름이 아니에요</button>`;
     show('result');
-    $('again').onclick = () => { try { localStorage.removeItem('done:' + session.id); } catch(e){} chosen = null; $('go').disabled = true; $('go').textContent = '내 이름을 골라 주세요'; renderList(''); show('formPanel'); };
+    $('again').onclick = () => { try { localStorage.removeItem(doneKey(r.kind)); } catch(e){} chosen = null; $('go').disabled = true; $('go').textContent = '내 이름을 골라 주세요'; renderList(''); show('formPanel'); };
     if (!dup) { try { Sound.sfx('phone'); } catch (e) {} }
     if (!dup) A.confetti({ count: 90, colors: [cfg.screen.accent, '#ffd43b', '#51cf66', '#4dabf7'] });
   }
@@ -135,7 +139,8 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
       const r = PREVIEW ? { ...roster.find(x => x.no === chosen), status: 'ok', session: session.label, at: new Date().toISOString() }
                         : await A.rpc('submit_attendance', { p_id: eventId, p_no: chosen });
       if (r.status === 'error') throw new Error(r.message);
-      try { if (!PREVIEW) localStorage.setItem('done:' + session.id, JSON.stringify(r)); } catch(e){}
+      try { if (!PREVIEW) localStorage.setItem(doneKey(r.kind), JSON.stringify(r)); } catch(e){}
+      if (r.kind && session && (r.kind === 'out') !== isOut()) { session.mode = r.kind; }
       showResult(r);
     } catch (e) {
       $('err').textContent = e.message || '제출하지 못했습니다. 다시 눌러 주세요.';
@@ -164,8 +169,13 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
       if (!ev) return full('행사를 찾을 수 없습니다', '강의실 화면의 QR을 다시 찍어 주세요.');
       const assets = ev.assets.includes('logo') ? await A.loadAssets(eventId, ['logo']) : {};
       apply(ev, assets);
-      let done = null; try { done = JSON.parse(localStorage.getItem('done:' + ev.session.id) || 'null'); } catch(e){}
-      if (done) { showResult({ ...done, status: 'dup' }); return; }
+      const out = isOut();
+      let done = null, mine = null;
+      try { done = JSON.parse(localStorage.getItem(doneKey(out ? 'out' : 'in')) || 'null'); mine = JSON.parse(localStorage.getItem(doneKey('in')) || 'null'); } catch(e){}
+      if (done) { showResult({ kind: out ? 'out' : 'in', ...done, status: 'dup' }); return; }
+      if (out && mine && roster.some(p => p.no === mine.no)) {   // 입실한 휴대폰이면 내 이름을 미리 골라 둔다
+        chosen = mine.no; renderList(''); $('go').disabled = false; $('go').textContent = `${mine.name} 님으로 퇴실`;
+      }
       show('formPanel');
     } catch (e) { full('불러오지 못했습니다', e.message); }
   })();
