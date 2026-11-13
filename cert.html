@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;600;700&family=Nanum+Myeongjo:wght@400;700;800&display=swap">
-<link rel="stylesheet" href="assets/common.css">
+<link rel="stylesheet" href="assets/common.css?v=20261114">
 <style>
 .head{background:var(--accent);color:var(--on-accent);padding:24px 16px 22px;position:relative}
 .head .wrap{display:flex;align-items:center;gap:16px}
@@ -65,8 +65,8 @@
   <div class="card full" id="full" hidden></div>
 </div></div>
 <script src="config.js"></script>
-<script src="assets/common.js"></script>
-<script src="assets/cert.js"></script>
+<script src="assets/common.js?v=20261114"></script>
+<script src="assets/cert.js?v=20261114"></script>
 <script>
 (function(){
   'use strict';
@@ -127,7 +127,7 @@
     try {
       const ev = await A.rpc('get_event', { p_id: eventId });
       if (!ev) return full('행사를 찾을 수 없습니다', '주소가 맞는지 확인해 주세요.');
-      cfg = A.withDefaults(ev.config); cert = cfg.cert; roster = ev.roster || [];
+      cfg = A.withDefaults(ev.config); cert = cfg.cert; roster = (ev.roster || []).concat((ev.extras || []).map(x => ({ ...x, rank: '' })));
       if (!cert.enabled) return full('받을 수 있는 증서가 없습니다', '이 행사는 위촉장(수료증)을 쓰지 않습니다.');
       cert.fields = (cert.fields || []).filter(f => f && f.label);
       A.applyColors(document.documentElement, '#f4f6fa', cfg.screen.accent);

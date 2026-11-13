@@ -6,6 +6,8 @@
   /* ---------- 기본 설정 ---------- */
   const DEFAULT_CONFIG = {
     title: '', subtitle: '', org: '', first_session: '1회차', block_duplicate: true,
+    // 출석 방식: walkin 명단에 없는 사람도 받기 / one_phone 한 휴대폰 한 사람 / rotate_qr 30초마다 바뀌는 QR / depts 직접 쓸 때 보여 줄 부서 목록
+    attend: { walkin: false, one_phone: false, rotate_qr: false, depts: [] },
     screen: {
       theme: 'card', bg: '#f5f6fa', accent: '#212b46', bg_image: 'soft', characters: true, motion: 'normal', sound: 'both', checkout: 'off',
       texts: {
@@ -27,7 +29,15 @@
     card:      { label: '중랑 카드',  desc: '중랑구 머리띠·3색 띠, 카드가 뒤집히며 켜짐', bg: '#f5f6fa', accent: '#212b46' },
     apartment: { label: '3D 아파트',  desc: '노을 속 입체 아파트에 불이 켜짐', bg: '#ffd43b', accent: '#222b45' },
     star:      { label: '은하수',     desc: '은하수에 별똥별이 날아와 별이 빛남', bg: '#04060f', accent: '#cfe3ff' },
-    garden:    { label: '장미축제',   desc: '장미가 피고 캐릭터가 반겨 줌', bg: '#fff0f3', accent: '#c2185b' }
+    garden:    { label: '장미축제',   desc: '장미가 피고 캐릭터가 반겨 줌', bg: '#fff0f3', accent: '#c2185b' },
+    lantern:   { label: '소원 등불',  desc: '밤하늘에 등불이 하나씩 떠오름', bg: '#101a3a', accent: '#ffcf7a' },
+    forest:    { label: '새싹 숲',    desc: '새싹이 나무로 자라 숲이 됨', bg: '#f1f8e9', accent: '#2e6b34' },
+    chalk:     { label: '칠판',       desc: '분필로 이름을 또박또박 적음', bg: '#f4efe6', accent: '#2f4f3e' },
+    memo:      { label: '메모 게시판', desc: '색색 메모지가 하나씩 붙음', bg: '#f7f1e3', accent: '#8a5a2b' },
+    led:       { label: '전광판',     desc: '경기장 전광판에 이름이 켜짐', bg: '#0d0f14', accent: '#ffb000' },
+    train:     { label: '중랑행 열차', desc: '열차 창문마다 불이 켜지고 출발', bg: '#eaf4fb', accent: '#0057a3' },
+    ocean:     { label: '바닷속',     desc: '물방울이 물고기가 되어 헤엄침', bg: '#062a4f', accent: '#7fe0ff' },
+    plaque:    { label: '금빛 명패',  desc: '위촉식에 어울리는 금빛 명패', bg: '#161a2e', accent: '#e3c06a' }
   };
   const PALETTES = [
     ['#f5f6fa', '#212b46', '중랑 남색'], ['#eef2f7', '#1f3a5f', '남색'], ['#ffd43b', '#222b45', '노랑·남색'], ['#0f1838', '#ffd66b', '밤하늘'],
@@ -84,6 +94,15 @@
       return k;
     }
     try { return sessionStorage.getItem(store) || myEvents().find(x => x.id === id)?.token || null; } catch (e) { return null; }
+  }
+
+  /* ---------- 휴대폰 출석표: 이 브라우저만 아는 무작위 값 (한 휴대폰 한 사람, 입실·퇴실 짝 맞추기) ---------- */
+  let memDevice = null;
+  function deviceId() {
+    try { const v = localStorage.getItem('att-device'); if (v && v.length >= 16) return v; } catch (e) {}
+    if (!memDevice) { const a = new Uint8Array(16); crypto.getRandomValues(a); memDevice = [...a].map(b => b.toString(16).padStart(2, '0')).join(''); }
+    try { localStorage.setItem('att-device', memDevice); } catch (e) {}
+    return memDevice;
   }
 
   /* ---------- 이 브라우저에서 만든 행사 목록 ---------- */
@@ -236,7 +255,7 @@
 
   window.App = {
     CFG, ready: !!(CFG.supabaseUrl && CFG.supabaseKey), DEFAULT_CONFIG, THEMES, PALETTES, withDefaults, merge,
-    rpc, RpcError, query, hashParam, links, siteBase, takeToken, myEvents, rememberEvent, forgetEvent,
+    rpc, RpcError, query, hashParam, links, siteBase, takeToken, deviceId, myEvents, rememberEvent, forgetEvent,
     esc, josa, hhmm, ymd, shortDate, applyColors, contrast, mix, lum,
     loadImage, shrinkImage, fetchAsDataUrl, loadAssets, qrCanvas, qrSvg, download, toast, dialog, confetti
   };

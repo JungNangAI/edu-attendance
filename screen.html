@@ -6,10 +6,10 @@
 <title>출석 화면</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
-<link rel="stylesheet" href="assets/common.css">
-<link rel="stylesheet" href="assets/screen.css">
-<link rel="stylesheet" href="assets/themes.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gaegu:wght@700&family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/common.css?v=20261114">
+<link rel="stylesheet" href="assets/screen.css?v=20261114">
+<link rel="stylesheet" href="assets/themes.css?v=20261114">
 </head>
 <body class="screen theme-card">
 <div class="bgimg" id="bgimg"></div>
@@ -24,7 +24,7 @@
 </header>
 <main class="s-main">
   <aside class="s-side">
-    <div class="qr-card"><div class="qr-box" id="qr"></div><p id="qrHint"></p></div>
+    <div class="qr-card"><div class="qr-box" id="qr"></div><div class="qr-timer" id="qrTimer" hidden><i></i></div><p id="qrHint"></p></div>
     <div class="counter">
       <svg class="ring" viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="42"/><circle class="bar" id="ringBar" cx="50" cy="50" r="42" stroke-dasharray="263.9" stroke-dashoffset="263.9"/></svg>
       <div><div class="count-num"><b id="count">0</b> <span>/ <span id="total">0</span></span></div><div class="count-unit" id="unit">명 출석</div></div>
@@ -41,6 +41,7 @@
   <button type="button" id="aNew" class="warn">새 회차 시작</button>
   <button type="button" id="aMode" class="mode">퇴실 받기 시작</button>
   <button type="button" id="aAbsent">미참석자</button>
+  <button type="button" id="aAdd">직접 출석 처리</button>
   <button type="button" id="aXlsNow">엑셀: 이번 회차</button>
   <button type="button" id="aXlsAll">엑셀: 전체 출석부</button>
   <button type="button" id="aFull">전체 화면</button>
@@ -55,9 +56,9 @@
 </aside>
 <div class="msg-full" id="full" hidden></div>
 <script src="config.js"></script>
-<script src="assets/qrcode.js"></script>
-<script src="assets/common.js"></script>
-<script src="assets/sound.js"></script>
-<script src="assets/screen.js"></script>
+<script src="assets/qrcode.js?v=20261114"></script>
+<script src="assets/common.js?v=20261114"></script>
+<script src="assets/sound.js?v=20261114"></script>
+<script src="assets/screen.js?v=20261114"></script>
 </body>
 </html>

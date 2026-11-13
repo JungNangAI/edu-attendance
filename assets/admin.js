@@ -20,7 +20,17 @@
       else el.value = v ?? '';
     });
     $('kind').value = ['위촉장', '수료증', '감사장', '임명장', '표창장'].includes(state.config.cert.title) ? state.config.cert.title : '';
+    $('depts').value = (state.config.attend.depts || []).join('\n');
+    syncAttendUi();
   }
+  // 출석 방식: 명단 밖 출석을 켜면 부서 목록 칸이 보이고, 명단이 없어도 된다
+  const walkin = () => !!(state.config.attend && state.config.attend.walkin);
+  function syncAttendUi() { $('deptsBox').hidden = !walkin(); }
+  $('depts').addEventListener('input', e => {
+    e.stopPropagation();
+    state.config.attend.depts = [...new Set(e.target.value.split(/\r?\n/).map(x => x.trim().slice(0, 60)).filter(Boolean))].slice(0, 300);
+    touch('attend.depts');
+  });
   function readEl(el) {
     if (el.type === 'checkbox') return el.checked;
     if (el.type === 'range') return Number(el.value);
@@ -42,6 +52,7 @@
   function touch(k = '') {
     changed = true;
     if (/^screen\.(bg|accent)/.test(k) || !k) checkContrast();
+    if (k.startsWith('attend')) syncAttendUi();
     if (k.startsWith('cert') || !k) { syncCertUi(); certPreview(); }
     if (!k.startsWith('cert.template') ) sendPreview();
     if (k === 'cert.enabled' || k === 'cert.button') sendPreview();
@@ -64,7 +75,7 @@
   function problems() {
     const p = [];
     if (!String(state.config.title || '').trim()) p.push([1, '행사 이름을 넣어 주세요']);
-    if (!state.roster.length) p.push([2, '명단을 올려 주세요']);
+    if (!state.roster.length && !walkin()) p.push([2, '명단을 올리거나 "명단에 없는 사람도 출석 받기"를 켜 주세요']);
     if (state.config.cert.enabled) {
       if (!String(state.config.cert.title || '').trim()) p.push([4, '증서 제목을 넣어 주세요']);
       if (!String(state.config.cert.issuer || '').trim()) p.push([4, '증서 명의를 넣어 주세요']);
@@ -74,7 +85,7 @@
   }
   function markSteps() {
     const bad = new Set(problems().map(x => x[0]));
-    $$('.steps button').forEach(b => { const n = +b.dataset.step; b.classList.toggle('ok', n < 5 && !bad.has(n) && (n !== 2 || state.roster.length > 0)); });
+    $$('.steps button').forEach(b => { const n = +b.dataset.step; b.classList.toggle('ok', n < 5 && !bad.has(n) && (n !== 2 || state.roster.length > 0 || walkin())); });
   }
   $$('.steps button').forEach(b => b.addEventListener('click', () => showStep(+b.dataset.step)));
   $('prev').onclick = () => showStep(Math.max(1, step - 1));
@@ -84,7 +95,9 @@
   };
   function renderSummary() {
     const c = state.config, items = [
-      ['행사', c.title || '(없음)'], ['명단', state.roster.length + '명'], ['테마', (A.THEMES[c.screen.theme] || {}).label],
+      ['행사', c.title || '(없음)'], ['명단', state.roster.length ? state.roster.length + '명' + (walkin() ? ' + 명단에 없는 사람도 받기' : '') : (walkin() ? '명단 없이 오는 대로 받기' : '0명')],
+      ['출석 방식', [c.attend.one_phone ? '한 휴대폰 한 사람' : '휴대폰 제한 없음', c.attend.rotate_qr ? '30초마다 바뀌는 QR' : '', c.screen.checkout === 'on' ? '퇴실 체크' : ''].filter(Boolean).join(' · ')],
+      ['테마', (A.THEMES[c.screen.theme] || {}).label],
       ['증서', c.cert.enabled ? `${c.cert.title} · ${c.cert.only_attendees === 'inout' ? '입실·퇴실 모두 한 사람만' : c.cert.only_attendees ? '출석한 사람만' : '누구나'}` : '쓰지 않음']
     ];
     if (EDIT && expiresAt) items.push(['자동 삭제 예정', new Date(expiresAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ' (출석·새 회차·저장할 때마다 10일씩 늦춰져요)']);
@@ -176,8 +189,20 @@
     star: (bg, ac) => `<div class="tthumb" style="background:radial-gradient(ellipse at 50% 50%,#3a2f55 0%,#02030a 70%)"><svg viewBox="0 0 60 36" width="78"><path d="M0 34 L60 2" stroke="#ffd9b0" stroke-width="10" opacity=".18"/><path d="M0 34 L60 2" stroke="#fff" stroke-width="3" opacity=".12"/>${Array.from({ length: 26 }, (_, i) => `<circle cx="${(i * 37) % 60}" cy="${(i * 23) % 36}" r=".5" fill="#fff"/>`).join('')}${[[14, 22], [30, 14], [44, 20]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2" fill="#fff"/><path d="M${x - 5} ${y}h10M${x} ${y - 5}v10" stroke="#fff" stroke-width=".5"/>`).join('')}</svg></div>`,
     garden: (bg, ac) => `<div class="tthumb" style="background:linear-gradient(#fff7f9,#ffd9e3)"><svg viewBox="0 0 60 36" width="78"><path d="M2 36 Q30 -6 58 36" stroke="#3f7d3f" stroke-width="2" fill="none"/>${[[8, 22], [16, 12], [30, 7], [44, 12], [52, 22]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="2.4" fill="${['#d6204f', '#ff5c8a', '#c2185b', '#ff8fa3', '#e63946'][i]}"/>`).join('')}${[[20, '#d6204f'], [30, '#ff5c8a'], [40, '#c2185b']].map(([x, c]) => `<rect x="${x - .5}" y="26" width="1" height="8" fill="#4f9a52"/><circle cx="${x}" cy="24" r="4" fill="${c}"/><circle cx="${x}" cy="24" r="1.6" fill="none" stroke="rgba(0,0,0,.3)" stroke-width=".6"/>`).join('')}<rect y="33" width="60" height="3" fill="#4f9a52"/></svg></div>`
   };
+  const tsvg = (bg, inner) => `<div class="tthumb" style="background:${bg}"><svg viewBox="0 0 60 36" width="78">${inner}</svg></div>`;
+  const cells = (cols, rows, w, h, x0, y0, gx, gy, f) => Array.from({ length: cols * rows }, (_, i) => f(x0 + (i % cols) * (w + gx), y0 + Math.floor(i / cols) * (h + gy), i)).join('');
+  Object.assign(THUMB, {
+    lantern: () => tsvg('linear-gradient(#060a1c,#3a2a58 80%,#70405a)', cells(4, 2, 9, 11, 6, 4, 4, 5, (x, y, i) => `<rect x="${x}" y="${y}" width="9" height="11" rx="4" fill="${[0, 2, 3, 5, 6].includes(i) ? '#ffc35c' : 'rgba(255,255,255,.12)'}"/>`) + '<path d="M0 36V31l8-4 9 3 10-5 10 5 9-3 14 4v5z" fill="#0a0d1e"/>'),
+    forest: () => tsvg('linear-gradient(#dff3ff,#d9f0c4)', '<circle cx="52" cy="7" r="4" fill="#ffd95a"/>' + cells(4, 1, 10, 0, 5, 0, 4, 0, (x, y, i) => `<rect x="${x + 4}" y="20" width="2" height="9" fill="#8a5a34"/><circle cx="${x + 5}" cy="${i === 3 ? 26 : 16}" r="${i === 3 ? 2 : 6}" fill="${['#3f9a4b', '#6aa84f', '#2f8a56', '#9ccc65'][i]}"/>`) + '<rect y="29" width="60" height="7" fill="#aad992"/>'),
+    chalk: () => tsvg('#27503f', '<rect x="1" y="1" width="58" height="34" fill="none" stroke="#8a5a2b" stroke-width="2"/>' + cells(3, 2, 14, 8, 6, 6, 3, 4, (x, y, i) => i < 4 ? `<path d="M${x + 2} ${y + 4}h10" stroke="${['#fff', '#ffe98a', '#ffc2d1', '#bfe9ff'][i]}" stroke-width="2.4" stroke-linecap="round"/>` : `<rect x="${x}" y="${y}" width="14" height="8" rx="1.5" fill="none" stroke="rgba(255,255,255,.3)" stroke-dasharray="2 1.5" stroke-width=".6"/>`)),
+    memo: () => tsvg('#c99b62', cells(4, 2, 10, 10, 6, 5, 3, 4, (x, y, i) => i < 6 ? `<rect x="${x}" y="${y}" width="10" height="10" fill="${['#fff3a3', '#ffd1dc', '#c8ecff', '#d4f5c4', '#ffe0b5', '#fff3a3'][i]}" transform="rotate(${[-4, 3, -2, 5, -3, 2][i]} ${x + 5} ${y + 5})"/><circle cx="${x + 5}" cy="${y + 1.5}" r="1" fill="#d62828"/>` : '')),
+    led: () => tsvg('#07090d', '<rect x="3" y="3" width="54" height="4" fill="none" stroke="#2a2e38" stroke-width=".5"/><circle cx="53" cy="5" r="1" fill="#ff4d4d"/>' + cells(3, 2, 15, 9, 4, 10, 3, 3, (x, y, i) => `<rect x="${x}" y="${y}" width="15" height="9" rx="1" fill="#0c0f15" stroke="${i < 4 ? ['#ffb000', '#39ff88', '#4fd8ff', '#ff6b6b'][i] : '#1e222b'}" stroke-width=".7"/>${i < 4 ? `<path d="M${x + 3} ${y + 4.5}h9" stroke="${['#ffb000', '#39ff88', '#4fd8ff', '#ff6b6b'][i]}" stroke-width="2"/>` : ''}`)),
+    train: () => tsvg('linear-gradient(#bfe4ff,#f6fbff)', [[5, '#106A3A'], [20, '#9E1C84']].map(([y, c], r) => `<path d="M6 ${y}h42q6 0 6 6v6H6z" fill="#f7f9fc" stroke="#c9d3e0" stroke-width=".5"/><rect x="6" y="${y + 9}" width="48" height="1.6" fill="${c}"/>${[0, 1, 2, 3].map(k => `<rect x="${9 + k * 10}" y="${y + 2}" width="8" height="6" rx="1" fill="${(r * 4 + k) % 3 ? '#ffe58a' : '#7fa5c7'}"/>`).join('')}<circle cx="14" cy="${y + 13}" r="1.6" fill="#2b3142"/><circle cx="46" cy="${y + 13}" r="1.6" fill="#2b3142"/>`).join('')),
+    ocean: () => tsvg('linear-gradient(#0a6fa8,#042848)', [[12, 9, '#ff8a5c'], [36, 14, '#ffd166'], [18, 24, '#5ee0c8'], [44, 26, '#b79cff']].map(([x, y, c]) => `<path d="M${x - 9} ${y - 3}l4 3-4 3z" fill="${c}"/><ellipse cx="${x}" cy="${y}" rx="7" ry="4" fill="${c}"/><circle cx="${x + 4}" cy="${y - 1}" r=".8" fill="#12233f"/>`).join('') + '<circle cx="28" cy="6" r="1.5" fill="none" stroke="#fff" stroke-width=".4"/><circle cx="52" cy="10" r="1" fill="none" stroke="#fff" stroke-width=".4"/><rect y="33" width="60" height="3" fill="#d9c188"/>'),
+    plaque: () => tsvg('radial-gradient(ellipse at 50% 0,#2b3566,#0b0e1f)', '<rect x="1.5" y="1.5" width="57" height="33" fill="none" stroke="#caa24a" stroke-width=".8"/>' + cells(3, 3, 15, 6, 5, 7, 3, 3, (x, y, i) => `<rect x="${x}" y="${y}" width="15" height="6" rx=".8" fill="${i < 5 ? '#e0bb5b' : 'rgba(227,192,106,.08)'}" stroke="#caa24a" stroke-width=".4"/>`))
+  });
   function renderThemes() {
-    $('themes').innerHTML = Object.entries(A.THEMES).map(([k, t]) => `<label class="theme"><input type="radio" name="theme" data-k="screen.theme" value="${k}">${THUMB[k](t.bg, t.accent)}<b>${t.label}</b><span>${t.desc}</span></label>`).join('');
+    $('themes').innerHTML = Object.entries(A.THEMES).map(([k, t]) => `<label class="theme"><input type="radio" name="theme" data-k="screen.theme" value="${k}">${(THUMB[k] || THUMB.card)(t.bg, t.accent)}<b>${t.label}</b><span>${t.desc}</span></label>`).join('');
     $('themes').addEventListener('change', e => {
       const t = A.THEMES[e.target.value]; if (!t) return;
       state.config.screen.bg = t.bg; state.config.screen.accent = t.accent; bindAll(); touch('screen.bg');
@@ -321,7 +346,7 @@
     x.fillStyle = paperInk; x.font = `800 64px ${FB}`; x.fillText('QR을 찍어 출석해 주세요', W / 2, 1410);
     x.fillStyle = '#1b2133';
     x.font = `500 38px ${FB}`; x.globalAlpha = .8;
-    x.fillText('휴대폰 카메라로 찍고 → 내 이름을 고르고 → 제출', W / 2, 1490);
+    x.fillText(state.roster.length ? '휴대폰 카메라로 찍고 → 내 이름을 고르고 → 제출' : '휴대폰 카메라로 찍고 → 부서·이름을 쓰고 → 제출', W / 2, 1490);
     x.globalAlpha = .6; x.font = `500 30px ${FB}`; x.fillText(cf.org || '', W / 2, 1650);
     return c.toDataURL('image/png');
   }
@@ -330,9 +355,11 @@
     const qr = A.qrCanvas(L.join, 360, 2).toDataURL('image/png');
     const card = (cls, title, desc, url, extra = '') => `<div class="link-card ${cls}">${extra}<div style="min-width:0;flex:1"><h3>${title}</h3><p class="hint" style="margin:0">${desc}</p><div class="url">${A.esc(url)}</div>
       <div class="row-btns" style="margin:0"><a class="btn ghost" href="${url}" target="_blank" rel="noopener">열기</a><button type="button" class="btn ghost" data-copy="${A.esc(url)}">복사</button></div></div></div>`;
+    const rot = !!(cf.attend && cf.attend.rotate_qr);
     return card('', '① 강의실 화면 (담당자용)', '이 링크로 열어야 엑셀·새 회차·출석 취소 버튼이 보여요. 주소창의 열쇠 부분은 열면 자동으로 숨겨져요.', L.screenAdmin)
-      + `<div class="link-card"><img class="qr" src="${qr}" alt="참석자 QR"><div style="min-width:0;flex:1"><h3>② 참석자 QR</h3><p class="hint" style="margin:0">강의실 화면에도 나오고, A4 안내문으로 뽑아 붙일 수도 있어요.</p><div class="url">${A.esc(L.join)}</div>
-        <div class="row-btns" style="margin:0"><button type="button" class="btn ghost" id="dlPoster">A4 QR 안내문</button><button type="button" class="btn ghost" id="dlQr">QR만</button><button type="button" class="btn ghost" data-copy="${A.esc(L.join)}">링크 복사</button></div></div></div>`
+      + (rot ? `<div class="link-card"><div style="min-width:0;flex:1"><h3>② 참석자 QR</h3><p class="hint" style="margin:0"><b>30초마다 바뀌는 QR</b>을 켠 행사예요. QR은 ①번 강의실 화면(담당자용)에만 나오고, A4 안내문이나 링크로는 출석할 수 없어요.</p></div></div>` : '')
+      + (rot ? '' : `<div class="link-card"><img class="qr" src="${qr}" alt="참석자 QR"><div style="min-width:0;flex:1"><h3>② 참석자 QR</h3><p class="hint" style="margin:0">강의실 화면에도 나오고, A4 안내문으로 뽑아 붙일 수도 있어요.</p><div class="url">${A.esc(L.join)}</div>
+        <div class="row-btns" style="margin:0"><button type="button" class="btn ghost" id="dlPoster">A4 QR 안내문</button><button type="button" class="btn ghost" id="dlQr">QR만</button><button type="button" class="btn ghost" data-copy="${A.esc(L.join)}">링크 복사</button></div></div></div>`)
       + (cf.cert.enabled ? card('', `③ ${cf.cert.title} 받기`, '보통은 출석 완료 화면의 버튼으로 들어가요. 따로 보낼 때 쓰세요.', L.cert) : '')
       + card('key', '🔑 관리 링크 (설정 고치기)', '잃어버리면 설정을 고치거나 엑셀을 받을 수 없어요. 이 브라우저의 첫 화면에도 저장해 두었어요.', L.admin)
       + `<button type="button" class="btn ghost" id="dlLinks">링크 모음 파일(.txt) 내려받기</button>`;
@@ -409,6 +436,7 @@
   (async function start() {
     if (!A.ready) { document.querySelector('.layout').innerHTML = '<div class="card">저장소(Supabase) 설정이 아직 없어요. config.js를 먼저 채워 주세요. (README 참고)</div>'; return; }
     if (!EDIT) {
+      state.config.attend.one_phone = true;   // 새 행사는 '한 휴대폰 한 사람'을 켠 채로 시작 (예전 행사는 그대로)
       state.config.cert.issuer = ''; initUi(); changed = false; return;
     }
     token = A.takeToken(eventId);
@@ -419,7 +447,7 @@
       const ev = await A.rpc('get_event', { p_id: eventId });
       if (!ev) throw new Error('행사를 찾을 수 없어요 (마지막으로 쓴 날부터 10일이 지나 자동으로 지워졌을 수 있어요)');
       if (!token || !await A.rpc('check_admin', { p_id: eventId, p_token: token })) throw new Error('관리 링크로 열어야 고칠 수 있어요. 처음 만들 때 받은 관리 링크를 써 주세요.');
-      state.config = A.withDefaults(ev.config); state.roster = ev.roster; expiresAt = ev.expires_at;
+      state.config = A.withDefaults(ev.config); state.roster = ev.roster || []; expiresAt = ev.expires_at;
       try { const ph = await A.rpc('get_phones', { p_id: eventId, p_token: token }) || {}; state.roster = state.roster.map(p => ({ ...p, phone: ph[p.no] || '' })); } catch (e) {}
       state.assets = await A.loadAssets(eventId, ev.assets);
       $('pageTitle').textContent = state.config.title;

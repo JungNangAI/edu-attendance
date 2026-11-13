@@ -1,7 +1,7 @@
 -- =====================================================================
--- 업데이트용 SQL (2026-11: 입실·퇴실, 관리 전용 연락처)
--- 이미 setup.sql을 실행한 저장소에 이 파일 전체를 붙여 넣고 Run 하세요.
--- 기존 행사·출석 기록·행사 만들기 비밀번호는 그대로 둡니다. 여러 번 실행해도 됩니다.
+-- QR 출석 + 위촉장 시스템 : 이미 쓰던 저장소 업데이트 SQL
+-- 사용법: Supabase 대시보드 → SQL Editor → New query → 이 파일 전체를 붙여 넣기 → Run
+-- 기존 행사·출석 기록·행사 만들기 비밀번호는 그대로입니다. 여러 번 실행해도 됩니다.
 -- =====================================================================
 
 create schema if not exists extensions;
@@ -47,6 +47,22 @@ alter table sessions   add column if not exists mode text not null default 'in';
 alter table attendance add column if not exists out_at timestamptz;                           -- 퇴실 시각
 alter table attendance alter column at drop not null;                                         -- 입실 없이 퇴실만 한 경우 비어 있음
 
+-- 명단 밖 출석(직접 입력)·휴대폰 출석표·바뀌는 QR (나중에 추가된 것. 다시 실행해도 된다)
+create table if not exists extras (               -- 명단에 없이 온 사람. 번호는 1000001부터
+  event_id   uuid not null references events(id) on delete cascade,
+  no         int  not null,
+  dept       text not null default '',
+  name       text not null,
+  created_at timestamptz not null default now(),
+  primary key (event_id, no)
+);
+alter table attendance add column if not exists device     text;   -- 입실한 휴대폰 표(해시). 한 휴대폰 한 사람·퇴실 짝 맞추기
+alter table attendance add column if not exists out_device text;   -- 퇴실한 휴대폰 표(해시)
+alter table attendance add column if not exists via        text;   -- 'admin' = 담당자가 대신 입실 처리
+alter table attendance add column if not exists out_via    text;   -- 'admin' = 담당자가 대신 퇴실 처리
+alter table events     add column if not exists qr_secret  text;   -- 바뀌는 QR을 만드는 비밀 값
+create index if not exists attendance_device on attendance(session_id, device);
+
 create table if not exists assets (              -- 올린 이미지(로고·배경·직인 등). 브라우저에서 줄여 data URL로 저장
   event_id uuid not null references events(id) on delete cascade,
   key      text not null,
@@ -60,13 +76,14 @@ alter table events       enable row level security;
 alter table sessions     enable row level security;
 alter table attendance   enable row level security;
 alter table assets       enable row level security;
-revoke all on app_settings, events, sessions, attendance, assets from public;
+alter table extras       enable row level security;
+revoke all on app_settings, events, sessions, attendance, assets, extras from public;
 do $$ begin
   if exists (select 1 from pg_roles where rolname = 'anon') then
-    execute 'revoke all on app_settings, events, sessions, attendance, assets from anon';
+    execute 'revoke all on app_settings, events, sessions, attendance, assets, extras from anon';
   end if;
   if exists (select 1 from pg_roles where rolname = 'authenticated') then
-    execute 'revoke all on app_settings, events, sessions, attendance, assets from authenticated';
+    execute 'revoke all on app_settings, events, sessions, attendance, assets, extras from authenticated';
   end if;
 end $$;
 
@@ -116,12 +133,98 @@ language sql immutable as $$
   where trim(coalesce(x->>'name','')) <> '' and regexp_replace(coalesce(x->>'phone',''), '[^0-9]', '', 'g') <> '';
 $$;
 
+-- 출석 방식 설정(config.attend.*)이 켜져 있는지
+create or replace function _opt(e events, k text) returns boolean
+language sql immutable as $$ select coalesce((e.config->'attend'->>k) = 'true', false) $$;
+
+-- 휴대폰 표를 해시로. 너무 짧거나 길면 없는 것으로 본다
+create or replace function _dev(p text) returns text
+language sql immutable set search_path = public, extensions as $$
+  select case when p is null or length(p) < 16 or length(p) > 200 then null else encode(digest(p, 'sha256'), 'hex') end;
+$$;
+
+create or replace function _norm(t text) returns text
+language sql immutable as $$ select lower(regexp_replace(coalesce(t, ''), '\s+', '', 'g')) $$;
+
+-- 사람 찾기: 명단, 없으면 명단 밖에서 온 사람
+create or replace function _person(e events, p_no int) returns jsonb
+language sql stable security definer set search_path = public, extensions as $$
+  select coalesce(
+    (select x from jsonb_array_elements(e.roster) x where (x->>'no')::int = p_no limit 1),
+    (select jsonb_build_object('no', x.no, 'dept', x.dept, 'rank', '', 'name', x.name, 'extra', true)
+       from extras x where x.event_id = e.id and x.no = p_no));
+$$;
+
+-- 출석 기록이 하나도 없는 '명단 밖 사람'은 지운다(취소했을 때)
+create or replace function _tidy_extras(p_id uuid) returns void
+language sql security definer set search_path = public, extensions as $$
+  delete from extras x where x.event_id = p_id
+     and not exists (select 1 from attendance a where a.event_id = x.event_id and a.person_no = x.no);
+$$;
+
+-- 명단 밖 사람 찾거나 새로 등록. 명단에 같은 부서·이름이 있으면 그 사람 번호
+create or replace function _find_person(e events, p_dept text, p_name text) returns int
+language sql stable security definer set search_path = public, extensions as $$
+  select coalesce(
+    (select (x->>'no')::int from jsonb_array_elements(e.roster) x
+      where _norm(x->>'name') = _norm(p_name) and _norm(x->>'dept') = _norm(p_dept) limit 1),
+    (select x.no from extras x where x.event_id = e.id and _norm(x.name) = _norm(p_name) and _norm(x.dept) = _norm(p_dept) limit 1));
+$$;
+create or replace function _add_extra(p_id uuid, p_dept text, p_name text) returns int
+language plpgsql security definer set search_path = public, extensions as $$
+declare n int;
+begin
+  loop
+    begin
+      insert into extras(event_id, no, dept, name)
+        values (p_id, coalesce((select max(x.no) from extras x where x.event_id = p_id), 1000000) + 1, p_dept, p_name)
+        returning no into n;
+      return n;
+    exception when unique_violation then null;   -- 동시에 들어오면 다음 번호로 다시
+    end;
+  end loop;
+end $$;
+create or replace function _clean_text(t text, n int) returns text
+language sql immutable as $$ select left(trim(regexp_replace(coalesce(t, ''), '\s+', ' ', 'g')), n) $$;
+
+-- 바뀌는 QR: 30초마다 달라지는 암호, 그리고 QR을 찍은 휴대폰에 주는 15분짜리 통과표
+create or replace function _qr_secret(p_id uuid) returns text
+language plpgsql security definer set search_path = public, extensions as $$
+declare s text;
+begin
+  select qr_secret into s from events where id = p_id;
+  if s is null then
+    update events set qr_secret = encode(gen_random_bytes(16), 'hex') where id = p_id and qr_secret is null;
+    select qr_secret into s from events where id = p_id;
+  end if;
+  return s;
+end $$;
+create or replace function _qr_code(p_secret text, p_w bigint) returns text
+language sql immutable set search_path = public, extensions as $$
+  select substr(encode(hmac(p_w::text, p_secret, 'sha256'), 'hex'), 1, 10);
+$$;
+create or replace function _pass_sig(p_secret text, p_dev text, p_exp bigint) returns text
+language sql immutable set search_path = public, extensions as $$
+  select substr(encode(hmac(p_dev || ':' || p_exp, p_secret, 'sha256'), 'hex'), 1, 32);
+$$;
+create or replace function _pass_ok(e events, p_dev text, p_pass text) returns boolean
+language plpgsql stable security definer set search_path = public, extensions as $$
+declare x bigint;
+begin
+  if not _opt(e, 'rotate_qr') then return true; end if;
+  if p_dev is null or p_pass is null or e.qr_secret is null or p_pass !~ '^[0-9]{1,12}\.[0-9a-f]{32}$' then return false; end if;
+  x := split_part(p_pass, '.', 1)::bigint;
+  return x >= floor(extract(epoch from now())) and split_part(p_pass, '.', 2) = _pass_sig(e.qr_secret, p_dev, x);
+end $$;
+
 create or replace function _event_payload(e events) returns jsonb
 language sql security definer set search_path = public, extensions as $$
   select jsonb_build_object(
     'id', e.id,
     'config', e.config,
     'roster', e.roster,
+    'extras', coalesce((select jsonb_agg(jsonb_build_object('no', x.no, 'dept', x.dept, 'name', x.name) order by x.no)
+                        from extras x where x.event_id = e.id), '[]'::jsonb),
     'session', (select jsonb_build_object('id', s.id, 'label', s.label, 'started_at', s.started_at, 'mode', s.mode)
                 from sessions s where s.id = e.current_session),
     'assets', coalesce((select jsonb_agg(a.key) from assets a where a.event_id = e.id), '[]'::jsonb),
@@ -138,8 +241,8 @@ begin
   if pw is null or p_password is null or crypt(p_password, pw) <> pw then
     raise exception '행사 만들기 비밀번호가 맞지 않습니다';
   end if;
-  r := _clean_roster(p_roster);
-  if jsonb_array_length(r) = 0 then raise exception '명단이 비어 있습니다'; end if;
+  r := _clean_roster(coalesce(p_roster, '[]'::jsonb));
+  if jsonb_array_length(r) = 0 and coalesce(p_config->'attend'->>'walkin', '') <> 'true' then raise exception '명단이 비어 있습니다'; end if;
   if jsonb_array_length(r) > 2000 then raise exception '명단은 2000명까지입니다'; end if;
   tok := encode(gen_random_bytes(18), 'hex');
   insert into events(admin_hash, config, roster, phones, expires_at)
@@ -165,37 +268,146 @@ language sql security definer set search_path = public, extensions as $$
   select data from assets where event_id = p_id and key = p_key;
 $$;
 
-create or replace function submit_attendance(p_id uuid, p_no int) returns jsonb
+-- 휴대폰이 QR을 찍고 들어올 때: 이 휴대폰이 이미 출석했는지, (바뀌는 QR이면) 통과표
+create or replace function join_enter(p_id uuid, p_device text, p_code text) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
-declare e events; p jsonb; s sessions; prev attendance; t timestamptz; dupblock boolean;
+declare e events; s sessions; d text; a attendance; me jsonb; w bigint; sec text; code_ok boolean := true; pass text; x bigint;
+begin
+  select * into e from events where id = p_id and expires_at >= now();
+  if e.id is null then return null; end if;
+  d := _dev(p_device);
+  select * into s from sessions where id = e.current_session;
+  if d is not null then
+    select * into a from attendance where session_id = s.id and (device = d or out_device = d) order by at nulls last limit 1;
+    if a.session_id is not null then
+      me := coalesce(_person(e, a.person_no), jsonb_build_object('no', a.person_no, 'dept', '', 'name', ''))
+            || jsonb_build_object('at', a.at, 'out_at', a.out_at, 'session', s.label);
+    end if;
+  end if;
+  if _opt(e, 'rotate_qr') then
+    sec := _qr_secret(e.id); w := floor(extract(epoch from now()) / 30)::bigint;
+    code_ok := p_code is not null and d is not null and p_code in (_qr_code(sec, w), _qr_code(sec, w - 1));
+    if code_ok then x := floor(extract(epoch from now()))::bigint + 900; pass := x || '.' || _pass_sig(sec, d, x); end if;
+  end if;
+  return jsonb_build_object('me', me, 'pass', pass, 'code_ok', code_ok, 'mode', s.mode,
+                            'strict', _opt(e, 'one_phone'), 'rotate', _opt(e, 'rotate_qr'));
+end $$;
+
+-- 출석(입실)·퇴실 제출. p_no = 명단에서 고른 번호, 없으면 p_dept·p_name(직접 쓴 것)
+create or replace function submit_attendance2(p_id uuid, p_no int, p_dept text, p_name text, p_device text, p_pass text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; s sessions; p jsonb; prev attendance; oth attendance; d text; n int; nm text; dp text;
+        onep boolean; dupblock boolean; t timestamptz;
 begin
   select * into e from events where id = p_id and expires_at >= now();
   if e.id is null then return jsonb_build_object('status', 'error', 'message', '행사를 찾을 수 없습니다'); end if;
-  select x into p from jsonb_array_elements(e.roster) x where (x->>'no')::int = p_no;
-  if p is null then return jsonb_build_object('status', 'error', 'message', '명단에 없는 이름입니다'); end if;
+  d := _dev(p_device); onep := _opt(e, 'one_phone');
+  if d is null and (onep or _opt(e, 'rotate_qr')) then
+    return jsonb_build_object('status', 'error', 'message', '화면을 새로고침한 뒤 다시 해 주세요');
+  end if;
+  if not _pass_ok(e, d, p_pass) then
+    return jsonb_build_object('status', 'error', 'code', 'qr', 'message', 'QR이 바뀌었어요. 강의실 화면의 QR을 다시 찍어 주세요');
+  end if;
   select * into s from sessions where id = e.current_session;
-  select * into prev from attendance where session_id = s.id and person_no = p_no;
+
+  -- 누구인지
+  if p_no is not null then
+    n := p_no;
+  else
+    if not (_opt(e, 'walkin') or jsonb_array_length(e.roster) = 0) then
+      return jsonb_build_object('status', 'error', 'message', '명단에 있는 사람만 출석할 수 있어요. 담당자에게 말씀해 주세요');
+    end if;
+    nm := _clean_text(p_name, 40); dp := _clean_text(p_dept, 60);
+    if nm = '' then return jsonb_build_object('status', 'error', 'message', '이름을 써 주세요'); end if;
+    n := _find_person(e, dp, nm);
+  end if;
+
+  -- 한 휴대폰은 한 사람만
+  if onep then
+    if s.mode = 'out' then
+      select * into oth from attendance where session_id = s.id and (device = d or out_device = d) and (n is null or person_no <> n) limit 1;
+    else
+      select * into oth from attendance where session_id = s.id and device = d and (n is null or person_no <> n) limit 1;
+    end if;
+    if oth.session_id is not null then
+      return jsonb_build_object('status', 'error', 'code', 'other', 'message',
+        '이 휴대폰으로는 이미 ' || coalesce(nullif(_person(e, oth.person_no)->>'name', ''), '다른 사람') || ' 님이 했어요. 한 휴대폰은 한 사람만 할 수 있어요');
+    end if;
+  end if;
+
+  -- 명단 밖 새 사람
+  if n is null then
+    if (select count(*) from extras where event_id = e.id and created_at > now() - interval '1 minute') >= 60 then
+      return jsonb_build_object('status', 'error', 'message', '지금 제출이 몰리고 있어요. 잠시 뒤 다시 해 주세요');
+    end if;
+    if (select count(*) from extras where event_id = e.id) >= 3000 then
+      return jsonb_build_object('status', 'error', 'message', '더 받을 수 없어요. 담당자에게 말씀해 주세요');
+    end if;
+    n := _add_extra(e.id, dp, nm);
+  end if;
+  p := _person(e, n);
+  if p is null then return jsonb_build_object('status', 'error', 'message', '명단에 없는 이름입니다'); end if;
+
+  select * into prev from attendance where session_id = s.id and person_no = n;
   dupblock := coalesce((e.config->>'block_duplicate')::boolean, true);
   update events set expires_at = now() + _keep() where id = e.id;   -- 출석한 날도 쓴 날로 친다
   if s.mode = 'out' then
     -- 퇴실 받는 중
+    if onep and prev.at is not null and prev.device is not null and prev.device <> d then
+      return jsonb_build_object('status', 'error', 'code', 'phone', 'message', '입실할 때와 같은 휴대폰·같은 앱(브라우저)으로 QR을 찍어 주세요. 안 되면 담당자에게 말씀해 주세요');
+    end if;
     if prev.out_at is not null then
       return p || jsonb_build_object('status', case when dupblock then 'dup' else 'ok' end, 'kind', 'out',
                                      'session', s.label, 'at', prev.out_at, 'in_at', prev.at);
     end if;
-    insert into attendance(session_id, event_id, person_no, at, out_at) values (s.id, e.id, p_no, null, now())
-      on conflict (session_id, person_no) do update set out_at = coalesce(attendance.out_at, excluded.out_at)
+    insert into attendance(session_id, event_id, person_no, at, out_at, out_device) values (s.id, e.id, n, null, now(), d)
+      on conflict (session_id, person_no) do update set out_at = coalesce(attendance.out_at, excluded.out_at),
+                                                        out_device = coalesce(attendance.out_device, excluded.out_device)
       returning out_at into t;
     return p || jsonb_build_object('status', 'ok', 'kind', 'out', 'session', s.label, 'at', t, 'in_at', prev.at);
   end if;
   -- 입실 받는 중
   if prev.at is not null then
+    if onep and prev.device is not null and prev.device <> d then
+      return jsonb_build_object('status', 'error', 'code', 'taken', 'message',
+        coalesce(p->>'name', '') || ' 님은 이미 다른 휴대폰으로 출석했어요. 본인이 맞다면 담당자에게 말씀해 주세요');
+    end if;
+    if prev.device is null and d is not null then   -- 담당자가 대신 처리한 사람: 이 휴대폰을 그 사람 것으로 묶는다
+      update attendance set device = d where session_id = s.id and person_no = n and device is null;
+    end if;
     return p || jsonb_build_object('status', case when dupblock then 'dup' else 'ok' end, 'kind', 'in', 'session', s.label, 'at', prev.at);
   end if;
-  insert into attendance(session_id, event_id, person_no, at) values (s.id, e.id, p_no, now())
-    on conflict (session_id, person_no) do update set at = coalesce(attendance.at, excluded.at)
+  insert into attendance(session_id, event_id, person_no, at, device) values (s.id, e.id, n, now(), d)
+    on conflict (session_id, person_no) do update set at = coalesce(attendance.at, excluded.at),
+                                                      device = coalesce(attendance.device, excluded.device)
     returning at into t;
   return p || jsonb_build_object('status', 'ok', 'kind', 'in', 'session', s.label, 'at', t);
+end $$;
+
+-- 예전 화면(새로고침 전 휴대폰)이 부르는 함수. 새 함수로 넘긴다
+create or replace function submit_attendance(p_id uuid, p_no int) returns jsonb
+language sql security definer set search_path = public, extensions as $$
+  select submit_attendance2(p_id, p_no, null, null, null, null);
+$$;
+
+-- "내 이름이 아니에요": 이 휴대폰으로 낸 이번 회차 출석(퇴실 받는 중이면 퇴실)을 본인이 되돌린다
+create or replace function undo_my_attendance(p_id uuid, p_device text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; s sessions; d text;
+begin
+  select * into e from events where id = p_id and expires_at >= now();
+  if e.id is null then return jsonb_build_object('status', 'error', 'message', '행사를 찾을 수 없습니다'); end if;
+  d := _dev(p_device);
+  if d is null then return jsonb_build_object('status', 'error', 'message', '화면을 새로고침한 뒤 다시 해 주세요'); end if;
+  select * into s from sessions where id = e.current_session;
+  if s.mode = 'out' then
+    update attendance set out_at = null, out_device = null, out_via = null where session_id = s.id and out_device = d;
+    delete from attendance where session_id = s.id and at is null and out_at is null;
+  else
+    delete from attendance where session_id = s.id and device = d and out_at is null;
+  end if;
+  perform _tidy_extras(e.id);
+  return jsonb_build_object('status', 'ok');
 end $$;
 
 create or replace function get_board(p_id uuid) returns jsonb
@@ -208,7 +420,9 @@ begin
   return jsonb_build_object(
     'session', jsonb_build_object('id', s.id, 'label', s.label, 'started_at', s.started_at, 'mode', s.mode),
     'updated_at', e.updated_at,
-    'list', coalesce((select jsonb_agg(jsonb_build_object('no', a.person_no, 'at', a.at) order by a.at)
+    'list', coalesce((select jsonb_agg(jsonb_build_object('no', a.person_no, 'at', a.at)
+                        || coalesce((select jsonb_build_object('dept', x.dept, 'name', x.name) from extras x
+                                      where x.event_id = a.event_id and x.no = a.person_no), '{}'::jsonb) order by a.at)
                       from attendance a where a.session_id = s.id and a.at is not null), '[]'::jsonb),
     'outs', coalesce((select jsonb_agg(jsonb_build_object('no', a.person_no, 'at', a.out_at) order by a.out_at)
                       from attendance a where a.session_id = s.id and a.out_at is not null), '[]'::jsonb));
@@ -239,7 +453,7 @@ declare e events; r jsonb; ph jsonb;
 begin
   e := _admin(p_id, p_token);
   r := case when p_roster is null then e.roster else _clean_roster(p_roster) end;
-  if jsonb_array_length(r) = 0 then raise exception '명단이 비어 있습니다'; end if;
+  if jsonb_array_length(r) = 0 and coalesce(coalesce(p_config, e.config)->'attend'->>'walkin', '') <> 'true' then raise exception '명단이 비어 있습니다'; end if;
   -- 새 명단에 전화번호가 하나도 없으면 예전 번호를 그대로 둔다
   ph := case when p_roster is null or _phones(p_roster) = '{}'::jsonb then e.phones else _phones(p_roster) end;
   update events set config = coalesce(p_config, config), roster = r, phones = ph, updated_at = now(),
@@ -300,6 +514,7 @@ begin
   else
     delete from attendance where session_id = (select current_session from events where id = p_id) and person_no = p_no;
   end if;
+  perform _tidy_extras(p_id);
   return get_board(p_id);
 end $$;
 
@@ -310,7 +525,11 @@ begin
   return jsonb_build_object(
     'sessions', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'label', label, 'started_at', started_at) order by started_at)
                           from sessions where event_id = p_id), '[]'::jsonb),
-    'attendance', coalesce((select jsonb_agg(jsonb_build_object('session_id', session_id, 'no', person_no, 'at', at, 'out_at', out_at) order by coalesce(at, out_at))
+    'current', (select current_session from events where id = p_id),
+    'extras', coalesce((select jsonb_agg(jsonb_build_object('no', x.no, 'dept', x.dept, 'name', x.name) order by x.no)
+                        from extras x where x.event_id = p_id), '[]'::jsonb),
+    'attendance', coalesce((select jsonb_agg(jsonb_build_object('session_id', session_id, 'no', person_no, 'at', at, 'out_at', out_at,
+                              'via', via, 'out_via', out_via, 'dev', left(device, 8), 'out_dev', left(out_device, 8)) order by coalesce(at, out_at))
                             from attendance where event_id = p_id), '[]'::jsonb));
 end $$;
 
@@ -323,6 +542,51 @@ begin
   update sessions set mode = p_mode where id = (select current_session from events where id = p_id);
   update events set expires_at = now() + _keep() where id = p_id;
   return get_board(p_id);
+end $$;
+
+-- 담당자가 대신 출석(입실)·퇴실 처리 (휴대폰이 없거나 꺼진 사람)
+create or replace function admin_mark(p_id uuid, p_token text, p_no int, p_kind text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events;
+begin
+  e := _admin(p_id, p_token);
+  if _person(e, p_no) is null then raise exception '명단에 없는 사람입니다'; end if;
+  if p_kind = 'out' then
+    insert into attendance(session_id, event_id, person_no, at, out_at, out_via) values (e.current_session, p_id, p_no, null, now(), 'admin')
+      on conflict (session_id, person_no) do update set
+        out_via = case when attendance.out_at is null then 'admin' else attendance.out_via end,
+        out_at = coalesce(attendance.out_at, excluded.out_at);
+  else
+    insert into attendance(session_id, event_id, person_no, at, via) values (e.current_session, p_id, p_no, now(), 'admin')
+      on conflict (session_id, person_no) do update set
+        via = case when attendance.at is null then 'admin' else attendance.via end,
+        at = coalesce(attendance.at, excluded.at);
+  end if;
+  update events set expires_at = now() + _keep() where id = p_id;
+  return get_board(p_id);
+end $$;
+
+-- 담당자가 명단에 없는 사람을 직접 넣고 출석 처리
+create or replace function admin_add(p_id uuid, p_token text, p_dept text, p_name text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; n int; nm text; dp text;
+begin
+  e := _admin(p_id, p_token);
+  nm := _clean_text(p_name, 40); dp := _clean_text(p_dept, 60);
+  if nm = '' then raise exception '이름을 써 주세요'; end if;
+  n := _find_person(e, dp, nm);
+  if n is null then n := _add_extra(p_id, dp, nm); end if;
+  return admin_mark(p_id, p_token, n, 'in');
+end $$;
+
+-- 바뀌는 QR에 넣을 지금 암호 (담당자용 강의실 화면만)
+create or replace function get_qr(p_id uuid, p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare sec text; ep numeric; w bigint;
+begin
+  perform _admin(p_id, p_token);
+  sec := _qr_secret(p_id); ep := extract(epoch from clock_timestamp()); w := floor(ep / 30)::bigint;
+  return jsonb_build_object('code', _qr_code(sec, w), 'ttl_ms', round(((w + 1) * 30 - ep) * 1000));
 end $$;
 
 -- 전화번호 (관리 열쇠가 있어야만 읽힘)
@@ -369,7 +633,9 @@ begin
     'get_board(uuid)', 'check_attended(uuid,int)', 'check_admin(uuid,text)', 'update_event(uuid,text,jsonb,jsonb)',
     'set_asset(uuid,text,text,text)', 'new_session(uuid,text,text)', 'rename_session(uuid,text,text)',
     'cancel_attendance(uuid,text,int)', 'export_all(uuid,text)', 'delete_event(uuid,text)',
-    'set_mode(uuid,text,text)', 'get_phones(uuid,text)']
+    'set_mode(uuid,text,text)', 'get_phones(uuid,text)',
+    'join_enter(uuid,text,text)', 'submit_attendance2(uuid,int,text,text,text,text)', 'undo_my_attendance(uuid,text)',
+    'admin_mark(uuid,text,int,text)', 'admin_add(uuid,text,text,text)', 'get_qr(uuid,text)']
   loop
     if exists (select 1 from pg_roles where rolname = 'anon') then
       execute format('grant execute on function %s to anon', f);
@@ -380,3 +646,5 @@ begin
   end loop;
 end $$;
 
+-- 새로 만든 함수를 바로 쓸 수 있게 API에 알린다
+notify pgrst, 'reload schema';

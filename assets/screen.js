@@ -14,8 +14,14 @@
   let displayed = [], queue = [], slots = [], theme = 'card', running = false;
   let shownCount = 0, msDone = 0;   // msDone: 이미 축하한 가장 높은 출석률(%)
   const MILESTONES = [50, 60, 70, 80, 90, 100];
-  const pctNow = () => roster.length ? Math.floor(displayed.length * 100 / roster.length) : 0;
-  const msReached = () => MILESTONES.filter(m => pctNow() >= m).pop() || 0;
+  const COUNT_MS = [10, 20, 30, 50, 80, 100, 150, 200, 300, 500, 1000];   // 명단 없이 받을 때: 몇 명 돌파
+  let rosterNos = new Set();           // 명단에 있는 번호
+  const extraMap = new Map();          // 명단 밖에서 온 사람 (번호 → 사람)
+  const rosterHere = () => displayed.filter(no => rosterNos.has(no)).length;
+  const extraHere = () => displayed.concat(queue).filter(no => !rosterNos.has(no)).length;
+  const pctNow = () => roster.length ? Math.floor(rosterHere() * 100 / roster.length) : 0;
+  const msReached = () => roster.length ? (MILESTONES.filter(m => pctNow() >= m).pop() || 0) : (COUNT_MS.filter(m => displayed.length >= m).pop() || 0);
+  const SOUND_OF = { lantern: 'star', forest: 'garden', chalk: 'card', memo: 'card', led: 'apartment', train: 'apartment', ocean: 'star', plaque: 'garden' };   // 새 테마가 빌려 쓰는 음악
 
   /* ---------- 작은 도구 ---------- */
   function seeded(seed) { let s = seed >>> 0 || 1; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
@@ -45,7 +51,8 @@
     }
     return out;
   }
-  const label = p => `<div class="dp">${A.esc(p.dept)}</div><div class="nm">${A.esc(p.name)}</div>`;
+  // --n: 이름 글자 수(3~8). 새 테마는 이 수에 맞춰 이름 글자 크기를 정해 긴 이름도 잘리지 않는다
+  const label = p => `<div class="dp">${A.esc(p.dept)}</div><div class="nm" style="--n:${Math.max(3, Math.min(8, [...String(p.name || '')].length))}">${A.esc(p.name)}</div>`;
   function shuffled(list, seed) {
     const rnd = seeded(seed), order = list.map((_, i) => i);
     for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
@@ -141,8 +148,9 @@
     star: { sides: ['l', 'r'], spots: [[1, 14], [33, 14], [65, 14]] },
     garden: { sides: ['l', 'r'], spots: [[1, 14], [33, 14], [65, 14]] }
   };
-  const FLY = { card: 'arc', apartment: 'chute', star: 'comet', garden: 'hop' };
-  const GLYPH = { card: ['★', '✦', '♥', '●'], apartment: ['✦', '★', '✧', '●'], star: ['✧', '✦', '★', '✶'], garden: ['✿', '❀', '♥', '✿'] };
+  const FLY = { card: 'arc', apartment: 'chute', star: 'comet', garden: 'hop', lantern: 'comet', forest: 'hop', train: 'hop', ocean: 'comet' };
+  const GLYPH = { card: ['★', '✦', '♥', '●'], apartment: ['✦', '★', '✧', '●'], star: ['✧', '✦', '★', '✶'], garden: ['✿', '❀', '♥', '✿'],
+    lantern: ['✦', '●', '✧', '★'], forest: ['❀', '✿', '♣', '●'], ocean: ['○', '◦', '●', '✧'], plaque: ['✦', '★', '✦', '✧'] };
   let castTimers = [], castFly = 0;
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   // 움직임 세기: calm(차분) / normal(보통, 기본) / wild(과하게). 주소 끝 ?motion=calm 으로 바로 바꿀 수 있다
@@ -258,8 +266,8 @@
     const t = el('div', 'ms-toast dept'); t.innerHTML = `<b>${A.esc(d)}</b> 전원 출석!`; document.body.appendChild(t);
     t.animate([{ transform: 'translate(-50%,-30%) scale(.3)', opacity: 0 }, { transform: 'translate(-50%,0) scale(1.12)', opacity: 1, offset: .2 }, { transform: 'translate(-50%,0) scale(1)', opacity: 1, offset: .85 }, { transform: 'translate(-50%,-20%) scale(.8)', opacity: 0 }], { duration: 3200 }).onfinish = () => t.remove();
   }
-  function milestoneToast(m) {
-    const t = el('div', 'ms-toast'); t.innerHTML = `<b>${m}%</b> 출석 달성!`; document.body.appendChild(t);
+  function milestoneToast(m, tail = '% 출석 달성!') {
+    const t = el('div', 'ms-toast'); t.innerHTML = tail[0] === '%' ? `<b>${m}%</b>${A.esc(tail.slice(1))}` : `<b>${m}</b>${A.esc(tail)}`; document.body.appendChild(t);
     t.animate([{ transform: 'translate(-50%,-30%) scale(.3)', opacity: 0 }, { transform: 'translate(-50%,0) scale(1.15)', opacity: 1, offset: .2 }, { transform: 'translate(-50%,0) scale(1)', opacity: 1, offset: .85 }, { transform: 'translate(-50%,-20%) scale(.8)', opacity: 0 }], { duration: 3000 }).onfinish = () => t.remove();
   }
   function castFinale(board, ratio = 1) {   // ratio: 출석률 — 퍼레이드에 나오는 캐릭터 수가 그 비율만큼   // 전원 출석: 글주임 퍼레이드 + 캐릭터 비
@@ -433,12 +441,95 @@
     }
   };
 
+  /* ---------- 새 테마 8종 (격자에 칸을 깔고 꾸밈만 다르게) ---------- */
+  function gridBuild(th, ar, gap, make, pad = {}, deco) {
+    return (board, n) => {
+      if (deco) deco(board);
+      const has = addCast(board, th), W = board.clientWidth, H = board.clientHeight, side = has ? 0.14 : 0;
+      return placeGrid(board, n, ar, gap, make, { l: W * ((pad.l || 0.02) + side), r: W * ((pad.r || 0.02) + side), t: H * (pad.t || 0.03), b: H * (pad.b || 0.03) });
+    };
+  }
+  const fillLbl = (s, p) => { s.querySelector('.lbl').innerHTML = label(p); };
+  const pickOf = (arr, i) => arr[i % arr.length];
+  const dots = (board, cls, n, seed, maxTop) => { const r = seeded(seed); for (let i = 0; i < n; i++) { const t = el('i', cls); Object.assign(t.style, { left: r() * 100 + '%', top: r() * maxTop + '%', animationDelay: r() * 3 + 's' }); board.appendChild(t); } };
+  Object.assign(THEME_IMPL, {
+    lantern: {   // 소원 등불: 밤하늘에 등불이 떠오른다
+      build: gridBuild('lantern', 1.0, 0.02, i => { const s = el('div', 'slot'); s.style.setProperty('--dl', (-(i % 7) * 0.6) + 's'); s.innerHTML = '<div class="lan"><i class="cap"></i><div class="lbl"></div><i class="tas"></i></div>'; return s; },
+        { t: 0.06, b: 0.13 }, board => { board.insertAdjacentHTML('beforeend', '<div class="l-moon"></div><div class="l-hill"></div>'); dots(board, 'sky-dot', 40, 31, 70); }),
+      fill: fillLbl
+    },
+    forest: {   // 새싹 숲: 새싹이 나무로 자란다
+      build: gridBuild('forest', 1.0, 0.016, i => { const s = el('div', 'slot'); s.style.setProperty('--tc', pickOf(['#3f9a4b', '#2f8a56', '#6aa84f', '#4c9f70', '#88b04b'], i)); s.style.setProperty('--dl', (-(i % 5) * 0.7) + 's');
+        s.innerHTML = '<div class="tree"><i class="trunk"></i><div class="crown"><div class="lbl"></div></div><i class="sprout"></i></div>'; return s; },
+        { t: 0.05, b: 0.07 }, board => board.insertAdjacentHTML('beforeend', '<div class="f-sun"></div><div class="f-hill a"></div><div class="f-hill b"></div>')),
+      fill: fillLbl
+    },
+    chalk: {   // 칠판: 분필로 이름을 적는다
+      build: gridBuild('chalk', 2.0, 0.02, i => { const s = el('div', 'slot'); s.style.setProperty('--ck', pickOf(['#ffffff', '#ffe98a', '#ffc2d1', '#bfe9ff', '#c9f5c0'], i)); s.innerHTML = `<div class="no">${i + 1}</div><div class="lbl"></div>`; return s; },
+        { l: 0.035, r: 0.035, t: 0.06, b: 0.11 }, board => board.insertAdjacentHTML('beforeend', '<div class="c-tray"><i></i><i></i><i></i></div>')),
+      fill: fillLbl
+    },
+    memo: {   // 메모 게시판: 색색 메모지가 붙는다
+      build: gridBuild('memo', 1.12, 0.03, i => { const r = seeded(i * 7 + 3), s = el('div', 'slot'); s.style.setProperty('--mc', pickOf(['#fff3a3', '#ffd1dc', '#c8ecff', '#d4f5c4', '#ffe0b5'], i)); s.style.setProperty('--rot', ((r() - .5) * 9).toFixed(1) + 'deg');
+        s.innerHTML = '<div class="note"><i class="pin"></i><div class="lbl"></div></div>'; return s; }, { l: 0.035, r: 0.035, t: 0.05, b: 0.05 }),
+      fill: fillLbl
+    },
+    led: {   // 전광판
+      build: gridBuild('led', 2.3, 0.022, i => { const s = el('div', 'slot'); s.style.setProperty('--lc', pickOf(['#ffb000', '#39ff88', '#4fd8ff', '#ff6b6b'], i)); s.innerHTML = `<div class="no">${String(i + 1).padStart(2, '0')}</div><div class="lbl"></div>`; return s; },
+        { t: 0.11, b: 0.04 }, board => board.insertAdjacentHTML('beforeend', '<div class="led-top"><span>ATTENDANCE</span><span>출석 현황</span><span>LIVE ●</span></div>')),
+      fill: fillLbl
+    },
+    train: {   // 중랑행 열차: 줄마다 열차 한 편, 창문에 불이 켜진다
+      build(board, n) {
+        board.insertAdjacentHTML('beforeend', '<div class="t-sun"></div><div class="t-cloud a"></div><div class="t-cloud b"></div>');
+        const has = addCast(board, 'train'), W = board.clientWidth, H = board.clientHeight;
+        const L = W * (has ? 0.16 : 0.03), T = H * 0.07, aw = W - 2 * L, ah = H - T - H * 0.04, gap = Math.min(aw, ah) * 0.014;
+        let best = null;   // 창문이 가장 커지는 열 수
+        for (let c = 1; c <= n; c++) {
+          const rows = Math.ceil(n / c), w = (aw - gap * (c - 1)) / (c + 0.9), h = ah / rows / 1.95;
+          if (w <= 0 || h <= 0) continue;
+          const ww = Math.min(w, h * 1.7), hh = Math.min(h, ww / 1.1);
+          if (!best || ww * hh > best.sc) best = { c, rows, ww, hh, sc: ww * hh };
+        }
+        const { c, rows, ww, hh } = best || { c: 1, rows: 1, ww: 80, hh: 60 }, rowH = ah / rows, out = [];
+        for (let r = 0; r < rows; r++) {
+          const cnt = Math.min(c, n - r * c), carW = cnt * ww + (cnt - 1) * gap + ww * 0.9, carH = hh * 1.55;
+          const car = el('div', 'car'); car.style.setProperty('--bc', JN[r % 3]);
+          Object.assign(car.style, { left: L + (aw - carW) / 2 + 'px', top: T + r * rowH + (rowH - hh * 1.9) / 2 + 'px', width: carW + 'px', height: carH + 'px',
+            padding: `${hh * 0.2}px ${ww * 0.55}px 0 ${ww * 0.35}px`, gap: gap + 'px', gridTemplateColumns: `repeat(${cnt}, ${ww}px)`, gridAutoRows: hh + 'px' });
+          car.innerHTML = '<i class="nose"></i><i class="wheels"></i>';
+          for (let k = 0; k < cnt; k++) { const s = el('div', 'slot'); car.appendChild(s); out.push(s); }
+          board.appendChild(car);
+        }
+        return out;
+      },
+      fill(s, p) { s.innerHTML = label(p); }
+    },
+    ocean: {   // 바닷속: 물방울이 물고기가 된다
+      build: gridBuild('ocean', 1.9, 0.03, i => { const s = el('div', 'slot'); s.style.setProperty('--fc', pickOf(['#ff8a5c', '#ffd166', '#5ee0c8', '#b79cff', '#ff7aa8', '#7cc8ff'], i)); s.style.setProperty('--dl', (-(i % 6) * 0.7) + 's');
+        s.innerHTML = '<i class="bub"></i><div class="fish"><i class="tail"></i><i class="eye"></i><div class="lbl"></div></div>'; return s; },
+        { t: 0.05, b: 0.1 }, board => { board.insertAdjacentHTML('beforeend', '<div class="o-rays"></div><div class="o-sand"></div>');
+          const r = seeded(77); for (let i = 0; i < 14; i++) { const b = el('i', 'o-bubble'); Object.assign(b.style, { left: r() * 100 + '%', animationDuration: 7 + r() * 8 + 's', animationDelay: -r() * 12 + 's', width: 0.6 + r() * 1.4 + 'vh' }); board.appendChild(b); } }),
+      fill: fillLbl
+    },
+    plaque: {   // 금빛 명패
+      build: gridBuild('plaque', 2.5, 0.03, () => { const s = el('div', 'slot'); s.innerHTML = '<div class="pl"><div class="lbl"></div></div>'; return s; },
+        { l: 0.04, r: 0.04, t: 0.1, b: 0.06 }, board => board.insertAdjacentHTML('beforeend', '<div class="p-crest">✦ ✦ ✦</div>')),
+      fill: fillLbl
+    }
+  });
+
   /* ---------- 보드 그리기 ---------- */
-  function totalSlots() { return Math.max(roster.length, displayed.length, 1); }
+  // 칸 수: 명단 인원 + 명단 밖에서 온 사람. 명단 없이 받을 때는 넉넉히 깔고 차면 늘린다
+  function totalSlots() {
+    const need = Math.max(displayed.length + queue.length, 1);
+    if (!roster.length) { let c = 12; while (c < need + 1) c = Math.ceil(c * 1.25 / 2) * 2; return c; }   // 12, 16, 20, 26, 34, 44, 56 …
+    return Math.max(roster.length + extraHere(), need);
+  }
   function buildBoard() {
     const board = $('board'); castStop();
     board.innerHTML = '';
-    Sound.configure(new URLSearchParams(location.search).get('sound') || cfg.screen.sound); Sound.mountUi(); Sound.setTheme(theme);
+    Sound.configure(new URLSearchParams(location.search).get('sound') || cfg.screen.sound); Sound.mountUi(); Sound.setTheme(SOUND_OF[theme] || theme);
     document.body.className = document.body.className.replace(/theme-\S+/, '') + ' theme-' + theme;
     const impl = THEME_IMPL[theme] || THEME_IMPL.card;
     slots = impl.build(board, totalSlots());
@@ -454,12 +545,14 @@
   function setCount(n, animate) {
     const out = isOutMode();
     if (out) n = displayed.filter(no => outSet.has(no)).length;
-    const total = (out ? displayed.length : roster.length) || 1, from = shownCount; shownCount = n;
-    Sound.setEnergy(roster.length ? displayed.length / roster.length : 0);
-    $('total').textContent = out ? displayed.length : roster.length;
+    const all = roster.length + extraHere(), open = !roster.length && !out;   // open: 명단 없이 오는 대로 받는 중
+    const total = (out ? displayed.length : all) || 1, from = shownCount; shownCount = n;
+    Sound.setEnergy(roster.length ? Math.min(1, displayed.length / all) : Math.min(1, displayed.length / 30));
+    $('total').textContent = out ? displayed.length : all;
+    document.body.classList.toggle('no-roster', open);
     $('unit').textContent = out ? '명 퇴실' : (cfg.screen.texts.unit || '명 출석');
     const bar = $('ringBar'), C = 2 * Math.PI * 42;
-    bar.style.strokeDashoffset = C * (1 - Math.min(1, n / total));
+    bar.style.strokeDashoffset = C * (1 - (open ? (n ? 1 : 0) : Math.min(1, n / total)));
     const b = $('count');
     if (!animate || from === n) { b.textContent = n; return; }
     const t0 = performance.now();
@@ -473,7 +566,7 @@
     w.classList.toggle('done', !!done);
     $('wDept').textContent = done ? '' : p.dept;
     $('wName').textContent = done ? cfg.screen.texts.done : p.name;
-    const st = !done && p && p.dept ? deptStat(p.dept) : null;   // 소속감: 우리 부서 몇 명째인지
+    const st = !done && p && p.dept && !p.extra ? deptStat(p.dept) : null;   // 소속감: 우리 부서 몇 명째인지
     $('wMsg').textContent = done ? '' : done === false ? ' 님 수고하셨습니다' : cfg.screen.texts.welcome + (st && st.t > 1 ? `  ·  ${p.dept} ${st.a}/${st.t}명` : '');
     w.classList.add('show');
     clearTimeout(bannerTimer); bannerTimer = setTimeout(() => w.classList.remove('show'), done ? 4200 : 2600);
@@ -484,7 +577,7 @@
     running = true;
     const no = queue.shift(), p = byNo.get(no), i = displayed.length;
     displayed.push(no);
-    if (i >= slots.length) { buildBoard(); }
+    if (i >= slots.length || totalSlots() > slots.length) { buildBoard(); }
     const s = slots[i], impl = THEME_IMPL[theme] || THEME_IMPL.card;
     const finish = () => {
       if (p) { impl.fill(s, p); s.dataset.no = no; }
@@ -495,7 +588,7 @@
       if (p) banner(p);
       cheerChars($('board'), p && p.name); castArrive(s, p);
       if (!(queue.length > 6 && displayed.length % 2)) Sound.sfx('arrive', { i: displayed.length - 1 });
-      if (p && p.dept) {   // 소속 전원 출석 이벤트
+      if (p && p.dept && !p.extra) {   // 소속 전원 출석 이벤트
         const st = deptStat(p.dept);
         if (st.t >= 2 && st.a === st.t) setTimeout(() => { Sound.sfx('dept'); deptToast(p.dept); A.confetti({ colors: ['#106A3A', '#9E1C84', '#0057A3', '#ffd43b'], count: 70 }); }, 700);
       }
@@ -503,6 +596,11 @@
       if (m > msDone) {   // 50·60·70·80·90% 달성 때마다 그 비율만큼의 글주임이 축하, 100%는 전원
         msDone = m;
         setTimeout(() => {
+          if (!roster.length) {   // 명단 없이 받을 때: 10명, 20명… 돌파
+            Sound.sfx('milestone', { pct: 60 }); milestoneToast(m, '명 돌파!'); A.confetti({ colors: [cfg.screen.accent, '#ffd43b', '#4dabf7'], count: 50 });
+            if (MOT().parade) castFinale($('board'), Math.min(1, m / 100));
+            return;
+          }
           Sound.sfx(m >= 100 ? 'finale' : 'milestone', { pct: m });
           if (m >= 100) { banner(null, true); A.confetti({ colors: [cfg.screen.accent, '#ffd43b', '#ff6b6b', '#4dabf7', '#51cf66'] }); }
           else { milestoneToast(m); A.confetti({ colors: [cfg.screen.accent, '#ffd43b', '#4dabf7'], count: 40 }); }
@@ -531,7 +629,9 @@
   /* ---------- 설정 적용 ---------- */
   function applyEvent(ev, assetMap) {
     cfg = A.withDefaults(ev.config);
-    roster = ev.roster || []; byNo = new Map(roster.map(p => [p.no, p]));
+    roster = ev.roster || []; byNo = new Map(roster.map(p => [p.no, p])); rosterNos = new Set(roster.map(p => p.no));
+    (ev.extras || []).forEach(x => extraMap.set(x.no, { no: x.no, dept: x.dept || '', rank: '', name: x.name, extra: true }));
+    extraMap.forEach((p, no) => { if (!byNo.has(no)) byNo.set(no, p); });
     assets = assetMap || {};
     theme = A.THEMES[cfg.screen.theme] ? cfg.screen.theme : 'card';
     const t = cfg.screen.texts;
@@ -541,7 +641,7 @@
     $('subtitle').textContent = cfg.subtitle || '';
     $('chip').textContent = t.chip || '출석 체크';
     $('tag1').textContent = t.tag1 || ''; $('tag2').textContent = t.tag2 || '';
-    $('qrHint').textContent = t.qr_hint || '';
+    $('qrHint').textContent = qrHint();
     $('unit').textContent = t.unit || '명 출석';
     $('foot').textContent = (t.foot || '') + (cfg.org ? '   ·   ' + cfg.org : '');
     const logoSrc = assets.logo || (theme === 'card' ? (A.contrast('#ffffff', cfg.screen.accent) >= 3 ? 'assets/defaults/jungnang_slogan_white.png' : 'assets/defaults/jungnang_slogan.png') : '');
@@ -549,10 +649,31 @@
     const bg = $('bgimg');
     bg.className = 'bgimg ' + (assets.bg && cfg.screen.bg_image !== 'off' ? (cfg.screen.bg_image === 'full' ? 'full' : 'soft') : '');
     bg.style.backgroundImage = assets.bg && cfg.screen.bg_image !== 'off' ? `url("${assets.bg}")` : '';
-    const joinUrl = PREVIEW ? 'https://example.github.io/edu-attendance/join.html?e=preview' : A.links(eventId).join;
-    $('qr').innerHTML = A.qrSvg(joinUrl);
-    $('qr').title = joinUrl;
+    refreshQr();
     modeBtn();
+  }
+  // QR 안내: 명단 없이 받는 행사인데 문구를 기본값 그대로 뒀으면 "이름을 고르세요" 대신 "쓰세요"
+  function qrHint() {
+    const h = cfg.screen.texts.qr_hint || '';
+    return !roster.length && h === A.DEFAULT_CONFIG.screen.texts.qr_hint ? '휴대폰 카메라로 QR을 찍고\n부서와 이름을 쓰세요' : h;
+  }
+  /* QR: 보통은 그대로, '바뀌는 QR'이면 30초마다 암호를 새로 받아 다시 그린다(담당자용 화면만) */
+  let qrT = 0, qrCode = null;
+  async function refreshQr() {
+    clearTimeout(qrT);
+    const base = PREVIEW ? 'https://example.github.io/edu-attendance/join.html?e=preview' : A.links(eventId).join;
+    const rot = !PREVIEW && !!(cfg.attend && cfg.attend.rotate_qr), timer = $('qrTimer');
+    timer.hidden = !rot || !isAdmin;
+    if (!rot) { qrCode = null; $('qr').innerHTML = A.qrSvg(base); $('qr').title = base; return; }
+    $('qr').title = '';
+    if (!isAdmin) { qrCode = null; $('qr').innerHTML = '<div class="qr-lock"><b>QR은 담당자용 화면에서만 보여요</b><span>바뀌는 QR을 쓰는 행사예요. 관리 링크로 연 강의실 화면을 띄워 주세요.</span></div>'; return; }
+    try {
+      const r = await A.rpc('get_qr', { p_id: eventId, p_token: token });
+      if (r.code !== qrCode) { qrCode = r.code; $('qr').innerHTML = A.qrSvg(base + '&c=' + r.code); }
+      const ms = Math.max(500, Math.min(30000, +r.ttl_ms || 30000)), bar = timer.firstElementChild;
+      bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = `qrleft ${ms}ms linear forwards`;
+      qrT = setTimeout(refreshQr, ms + 250);
+    } catch (e) { qrT = setTimeout(refreshQr, 4000); }
   }
   function setSession(s) { sessionId = s.id; sessionLabel = s.label; $('session').textContent = s.label + (isOutMode() ? ' · 퇴실 받는 중' : ''); }
   // 입실/퇴실 받기 화면 바꾸기
@@ -561,7 +682,7 @@
     document.body.classList.toggle('mode-out', isOutMode());
     const t = cfg.screen.texts;
     $('chip').textContent = isOutMode() ? '퇴실 체크' : (t.chip || '출석 체크');
-    $('qrHint').textContent = isOutMode() ? '수업이 끝났어요. QR을 찍고 퇴실해 주세요' : (t.qr_hint || '');
+    $('qrHint').textContent = isOutMode() ? '수업이 끝났어요. QR을 찍고 퇴실해 주세요' : qrHint();
     if (sessionLabel) $('session').textContent = sessionLabel + (isOutMode() ? ' · 퇴실 받는 중' : '');
     modeBtn();
     markLeft(); setCount(displayed.length, false);
@@ -614,6 +735,10 @@
       }
       updatedAt = b.updated_at;
       const nos = b.list.map(x => x.no); lastList = b.list;
+      b.list.forEach(x => {   // 명단 밖에서 온 사람은 보드 자료에 부서·이름이 함께 온다
+        if (x.name == null || rosterNos.has(x.no)) return;
+        const p = { no: x.no, dept: x.dept || '', rank: '', name: x.name, extra: true }; extraMap.set(x.no, p); byNo.set(x.no, p);
+      });
       const newMode = b.session.mode || 'in';
       if (b.session.id !== sessionId) {
         const had = sessionId !== null;
@@ -660,21 +785,47 @@
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
     XLSX.writeFile(wb, file);
   }
+  // 엑셀용 자료: 명단 + 명단 밖에서 온 사람, 담당자 처리·같은 휴대폰 표시 (예전 저장소면 없는 칸은 빈 것으로)
+  async function exportData() {
+    const d = await A.rpc('export_all', { p_id: eventId, p_token: token });
+    const ex = (d.extras || []).map(x => ({ no: x.no, dept: x.dept || '', rank: '', name: x.name, extra: true }));
+    return { d, all: roster.concat(ex) };
+  }
+  const statusOf = (a, usesOut) => !a ? '' : a.at && a.out_at ? '완료' : a.at ? (usesOut ? '퇴실 없음' : '출석') : '퇴실만';
+  function noteOf(a, shared) {
+    if (!a) return '';
+    const n = [];
+    if (a.via === 'admin') n.push('담당자 입실 처리');
+    if (a.out_via === 'admin') n.push('담당자 퇴실 처리');
+    if (a.dev && shared.get(a.dev) > 1) n.push(`같은 휴대폰 ${shared.get(a.dev)}명`);
+    return n.join(', ');
+  }
+  const sharedOf = rows => { const m = new Map(); rows.forEach(a => { if (a.dev) m.set(a.dev, (m.get(a.dev) || 0) + 1); }); return m; };
   async function exportNow() {
     try {
       await needXlsx();
-      const at = new Map(lastList.map(x => [x.no, x.at])), out = new Map(lastOuts.map(x => [x.no, x.at]));
-      const rows = [[`${cfg.title} 출석 (${sessionLabel})`], [], ['연번', '부서명', '직위(직급)', '성명', '출석', '출석 시각', '퇴실 시각']];
-      roster.forEach(p => rows.push([p.no, p.dept, p.rank, p.name, at.has(p.no) ? 'O' : '', at.has(p.no) ? A.hhmm(at.get(p.no)) : '', out.has(p.no) ? A.hhmm(out.get(p.no)) : '']));
-      rows.push([], ['', '출석 인원', '', `${at.size}명 / ${roster.length}명`], ['', '퇴실 인원', '', `${out.size}명`]);
-      saveBook(rows, [6, 22, 14, 10, 6, 10, 10], sessionLabel || '출석', `${fileSafe(cfg.title)}_${fileSafe(sessionLabel)}_출석.xlsx`);
+      const { d, all } = await exportData();
+      const sid = d.current || sessionId, mine = d.attendance.filter(a => a.session_id === sid), map = new Map(mine.map(a => [a.no, a]));
+      const usesOut = cfg.screen.checkout === 'on' || mine.some(a => a.out_at), shared = sharedOf(mine);
+      const rows = [[`${cfg.title} 출석 (${sessionLabel})`], [], ['연번', '부서명', '직위(직급)', '성명', '출석', '출석 시각', '퇴실 시각', '상태', '구분', '비고']];
+      let k = 0;
+      all.filter(p => !p.extra || map.has(p.no)).forEach(p => {
+        const a = map.get(p.no);
+        rows.push([p.extra ? (roster.length ? '추가' : '') + (++k) : p.no, p.dept, p.rank, p.name, a && a.at ? 'O' : '', a && a.at ? A.hhmm(a.at) : '', a && a.out_at ? A.hhmm(a.out_at) : '', statusOf(a, usesOut), p.extra ? '추가' : '명단', noteOf(a, shared)]);
+      });
+      const nIn = mine.filter(a => a.at).length, nOut = mine.filter(a => a.out_at).length, nDone = mine.filter(a => a.at && a.out_at).length;
+      rows.push([], ['', '출석 인원', '', roster.length ? `${nIn}명 / 명단 ${roster.length}명` : `${nIn}명`]);
+      if (k) rows.push(['', '명단 밖 출석', '', `${k}명`]);
+      rows.push(['', '퇴실 인원', '', `${nOut}명`]);
+      if (usesOut) rows.push(['', '입실·퇴실 완료', '', `${nDone}명`]);
+      saveBook(rows, [8, 22, 14, 10, 6, 10, 10, 10, 7, 28], sessionLabel || '출석', `${fileSafe(cfg.title)}_${fileSafe(sessionLabel)}_출석.xlsx`);
     } catch (e) { A.toast(e.message, 'bad'); }
   }
   /* 미참석자: 이번 회차에 아직 입실(또는 퇴실)하지 않은 사람 (담당자 전용) */
   let abTab = 'in';
   function absentees(tab = abTab) {
     const here = new Set(lastList.map(x => x.no));
-    return tab === 'out' ? roster.filter(p => here.has(p.no) && !outSet.has(p.no)) : roster.filter(p => !here.has(p.no));
+    return tab === 'out' ? [...byNo.values()].filter(p => here.has(p.no) && !outSet.has(p.no)) : roster.filter(p => !here.has(p.no));
   }
   const telOf = p => phones[p.no] || '';
   function renderAbsent() {
@@ -689,7 +840,7 @@
     $('abTitle').textContent = abTab === 'out' ? '퇴실 안 한 사람' : '미참석자';
     $('abN').textContent = abTab === 'out' ? `${list.length}명 / 입실 ${lastList.length}명` : `${list.length}명 / ${roster.length}명`;
     $('abList').innerHTML = list.length ? [...groups].map(([d, ps]) =>
-      `<h4>${A.esc(d)} (${ps.length})</h4><ul>${ps.map(p => `<li><span>${A.esc(p.name)}${p.rank ? ' · ' + A.esc(p.rank) : ''}</span>${telOf(p) ? `<a href="tel:${A.esc(telOf(p))}">${A.esc(telOf(p))}</a>` : ''}</li>`).join('')}</ul>`).join('')
+      `<h4>${A.esc(d)} (${ps.length})</h4><ul>${ps.map(p => `<li><span>${A.esc(p.name)}${p.rank ? ' · ' + A.esc(p.rank) : ''}</span>${telOf(p) ? `<a href="tel:${A.esc(telOf(p))}">${A.esc(telOf(p))}</a>` : ''}<button type="button" class="ab-mark" data-mark="${p.no}">${abTab === 'out' ? '퇴실 처리' : '출석 처리'}</button></li>`).join('')}</ul>`).join('')
       : `<div class="ab-none">${abTab === 'out' ? '입실한 사람 모두 퇴실했습니다' : '모두 출석했습니다'}</div>`;
   }
   function toggleAbsent(show) {
@@ -723,20 +874,39 @@
   async function exportAll() {
     try {
       await needXlsx();
-      const d = await A.rpc('export_all', { p_id: eventId, p_token: token });
-      const ss = d.sessions, map = new Map();
+      const { d, all } = await exportData();
+      const ss = d.sessions, map = new Map(), shared = new Map();
       d.attendance.forEach(a => map.set(a.session_id + ':' + a.no, a));
-      const head = ['연번', '부서명', '직위(직급)', '성명', ...ss.map(s => `${s.label} (${A.ymd(s.started_at)})`), '출석 횟수'];
+      ss.forEach(s2 => shared.set(s2.id, sharedOf(d.attendance.filter(a => a.session_id === s2.id))));
+      const head = ['연번', '부서명', '직위(직급)', '성명', ...ss.map(s2 => `${s2.label} (${A.ymd(s2.started_at)})`), '출석 횟수', '구분', '비고'];
       const rows = [[`${cfg.title} 출석부`], [], head];
-      roster.forEach(p => {
-        const marks = ss.map(s => { const a = map.get(s.id + ':' + p.no); if (!a) return '';
+      let k = 0;
+      all.forEach(p => {
+        const notes = new Set();
+        const marks = ss.map(s2 => { const a = map.get(s2.id + ':' + p.no); if (!a) return '';
+          noteOf(a, shared.get(s2.id)).split(', ').filter(Boolean).forEach(n => notes.add(n));
           return a.at ? '출석 ' + A.hhmm(a.at) + (a.out_at ? ' / 퇴실 ' + A.hhmm(a.out_at) : '') : '퇴실만 ' + A.hhmm(a.out_at); });
-        rows.push([p.no, p.dept, p.rank, p.name, ...marks, marks.filter(m => m.startsWith('출석')).length]);
+        if (p.extra && !marks.some(Boolean)) return;
+        rows.push([p.extra ? (roster.length ? '추가' : '') + (++k) : p.no, p.dept, p.rank, p.name, ...marks, marks.filter(m => m.startsWith('출석')).length, p.extra ? '추가' : '명단', [...notes].join(', ')]);
       });
-      rows.push([], ['', '회차별 출석 인원', '', '', ...ss.map(s => d.attendance.filter(a => a.session_id === s.id && a.at).length + '명')],
-        ['', '회차별 퇴실 인원', '', '', ...ss.map(s => d.attendance.filter(a => a.session_id === s.id && a.out_at).length + '명')]);
-      saveBook(rows, [6, 22, 14, 10, ...ss.map(() => 26), 9], '출석부', `${fileSafe(cfg.title)}_출석부_전체.xlsx`);
+      rows.push([], ['', '회차별 출석 인원', '', '', ...ss.map(s2 => d.attendance.filter(a => a.session_id === s2.id && a.at).length + '명')],
+        ['', '회차별 퇴실 인원', '', '', ...ss.map(s2 => d.attendance.filter(a => a.session_id === s2.id && a.out_at).length + '명')]);
+      saveBook(rows, [8, 22, 14, 10, ...ss.map(() => 26), 9, 7, 28], '출석부', `${fileSafe(cfg.title)}_출석부_전체.xlsx`);
     } catch (e) { A.toast(e.message, 'bad'); }
+  }
+  // 담당자가 대신 처리: 명단에 없는 사람 넣기 / 미참석자 한 사람씩 출석(퇴실) 처리
+  async function addPerson() {
+    const name = await A.dialog({ title: '직접 출석 처리', message: '명단에 없는 사람이나 휴대폰이 없는 사람을 담당자가 대신 출석 처리합니다.\n(명단에 있는 사람은 [미참석자]에서 처리할 수 있어요)\n\n이름을 써 주세요.', input: '', ok: '다음' });
+    if (!name) return;
+    const dept = await A.dialog({ title: `${name} 님의 부서(소속)`, input: '', ok: '출석 처리' });
+    if (dept === null) return;
+    try { await A.rpc('admin_add', { p_id: eventId, p_token: token, p_dept: dept, p_name: name }); A.toast(`${name} 님을 출석 처리했어요`, 'ok'); }
+    catch (e) { A.toast(e.message, 'bad'); }
+  }
+  async function markPerson(no) {
+    const p = byNo.get(no) || { name: '' }, out = abTab === 'out';
+    try { await A.rpc('admin_mark', { p_id: eventId, p_token: token, p_no: no, p_kind: out ? 'out' : 'in' }); A.toast(`${p.name} 님을 ${out ? '퇴실' : '출석'} 처리했어요`, 'ok'); }
+    catch (e) { A.toast(e.message, 'bad'); }
   }
   async function newSession() {
     const name = await A.dialog({ title: '새 회차 시작', message: '화면을 비우고 새 회차 출석을 받습니다.\n지난 회차 기록은 그대로 남아 "전체 출석부"에 나옵니다.', input: A.shortDate(), ok: '새 회차 시작' });
@@ -762,6 +932,8 @@
     $('abCopy').onclick = copyAbsent; $('abXls').onclick = exportAbsent;
     $('abTabIn').onclick = () => { abTab = 'in'; renderAbsent(); }; $('abTabOut').onclick = () => { abTab = 'out'; renderAbsent(); };
     $('aMode').onclick = toggleMode; modeBtn();
+    $('aAdd').onclick = addPerson;
+    $('abList').addEventListener('click', e => { const b = e.target.closest('[data-mark]'); if (b) { b.disabled = true; markPerson(+b.dataset.mark); } });
     A.rpc('get_phones', { p_id: eventId, p_token: token }).then(ph => { phones = ph || {}; if (!$('absent').hidden) renderAbsent(); }).catch(() => {});
     $('aFull').onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {});
     $('aEdit').onclick = () => window.open(A.links(eventId, token).admin, '_blank', 'noopener');
@@ -806,6 +978,7 @@
       token = A.takeToken(eventId);
       if (token) isAdmin = await A.rpc('check_admin', { p_id: eventId, p_token: token }).catch(() => false);
       if (isAdmin) setupAdmin();
+      refreshQr();
       poll();
     } catch (e) { full('불러오지 못했습니다', e.message); }
   })();

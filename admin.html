@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&family=Nanum+Myeongjo:wght@400;700;800&display=swap">
-<link rel="stylesheet" href="assets/common.css">
-<link rel="stylesheet" href="assets/admin.css">
+<link rel="stylesheet" href="assets/common.css?v=20261114">
+<link rel="stylesheet" href="assets/admin.css?v=20261114">
 </head>
 <body>
 <header class="topbar"><div class="wrap">
@@ -35,12 +35,22 @@
       <div class="field"><label class="f" for="org">주관 부서</label><input type="text" id="org" data-k="org" maxlength="40" placeholder="예: 중랑AI혁신팀"></div>
       <div class="field" id="firstSessionBox"><label class="f" for="fs">첫 회차 이름</label><input type="text" id="fs" data-k="first_session" maxlength="40"><p class="hint">강의실 화면의 [새 회차 시작]으로 다음 회차를 엽니다. 회차마다 출석이 따로 쌓여요.</p></div>
       <label class="check"><input type="checkbox" data-k="block_duplicate"> 한 회차에 한 사람 한 번만 출석 (중복 막기)</label>
+      <label class="check"><input type="checkbox" data-k="attend.one_phone"> 한 휴대폰은 한 사람만 (여러 번 내기·대리 출석 막기)</label>
+      <p class="hint">한 휴대폰으로 낸 뒤에는 다른 이름으로 또 낼 수 없어요. 퇴실 체크를 쓰면 <b>입실한 휴대폰으로만 퇴실</b>할 수 있고, 엑셀에 '완료 / 퇴실 없음'이 나와요. 휴대폰이 없는 사람은 강의실 화면의 <b>직접 출석 처리</b>·<b>미참석자</b>에서 담당자가 대신 처리해요.</p>
+      <label class="check"><input type="checkbox" data-k="attend.rotate_qr"> 30초마다 바뀌는 QR (그 자리에 있는 사람만 출석)</label>
+      <p class="hint">QR을 찍어 다른 사람에게 보내도 금방 못 쓰게 돼요. QR은 <b>담당자용 강의실 화면</b>에만 나오고, A4 안내문·링크로는 출석할 수 없어요.</p>
     </section>
 
     <!-- 2. 명단 -->
     <section class="step card" data-step="2" hidden>
       <h2>2. 명단</h2>
       <p class="hint" style="margin-top:-6px">엑셀 파일을 올리면 이 브라우저 안에서 읽습니다. 연번·부서·직위·성명과 연락처(있으면)만 저장해요. 연락처는 담당자의 관리 화면에서만 보여요.</p>
+      <div class="attend-box">
+        <label class="check"><input type="checkbox" data-k="attend.walkin"> 명단에 없는 사람도 출석 받기 (휴대폰에서 부서·이름을 직접 써요)</label>
+        <p class="hint">명단을 올리고 켜면 <b>명단 + 갑자기 온 사람</b>을 함께 받고, 명단 없이 이것만 켜면 <b>오는 대로 받는 방명록</b>이 돼요. 직접 쓴 사람은 엑셀에 '추가'로 표시돼요.</p>
+        <div class="field" id="deptsBox" hidden><label class="f" for="depts">부서 목록 (선택)</label><textarea id="depts" rows="3" style="min-height:76px" placeholder="한 줄에 하나씩 써 주세요&#10;기획예산과&#10;스마트정보과"></textarea>
+          <p class="hint">직접 쓰는 사람이 부서를 눌러 고를 수 있게 보여 줘요. 비워 두면 명단에 있는 부서가 나와요.</p></div>
+      </div>
       <div class="drop" id="drop" tabindex="0" role="button" aria-label="명단 엑셀 파일 올리기">
         <input type="file" id="rosterFile" accept=".xlsx,.xls,.csv" hidden>
         <b>엑셀 파일을 여기에 끌어다 놓거나 눌러서 고르세요</b><span>.xlsx · .xls · .csv</span>
@@ -201,10 +211,10 @@
 </div>
 
 <script src="config.js"></script>
-<script src="assets/qrcode.js"></script>
-<script src="assets/xlsx.full.min.js"></script>
-<script src="assets/common.js"></script>
-<script src="assets/cert.js"></script>
-<script src="assets/admin.js"></script>
+<script src="assets/qrcode.js?v=20261114"></script>
+<script src="assets/xlsx.full.min.js?v=20261114"></script>
+<script src="assets/common.js?v=20261114"></script>
+<script src="assets/cert.js?v=20261114"></script>
+<script src="assets/admin.js?v=20261114"></script>
 </body>
 </html>

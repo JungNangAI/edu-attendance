@@ -112,3 +112,8 @@ table.roster th{background:var(--soft);position:sticky;top:0}
   .steps span{display:none}.steps button{min-width:0;justify-content:center}
   .link-card{flex-direction:column}
 }
+
+/* 출석 방식(명단 밖 출석) */
+.attend-box{background:var(--soft);border-radius:12px;padding:12px 14px;margin:12px 0}
+.attend-box .check{margin:0}
+.attend-box .field{margin:10px 0 0}

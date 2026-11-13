@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
-<link rel="stylesheet" href="assets/common.css">
+<link rel="stylesheet" href="assets/common.css?v=20261114">
 <style>
 body{background:var(--bg);min-height:100vh;min-height:100dvh}
 .head{background:var(--accent);color:var(--on-accent);padding:22px max(16px,env(safe-area-inset-left)) 46px;position:relative;overflow:hidden}
@@ -54,6 +54,17 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
 .result .again{display:inline-block;margin-top:14px;font-size:13px;color:var(--muted);background:none;border:0;text-decoration:underline;cursor:pointer;font:inherit;font-size:13px}
 @keyframes rise{from{opacity:0;transform:translateY(10px)}}
 .full{padding:60px 20px;text-align:center}
+/* 직접 쓰기(명단에 없는 사람) · 내 퇴실 */
+.wfield{margin-bottom:14px}
+.wfield input{font-size:17px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chips button{font:inherit;font-size:14px;border:1.5px solid var(--line);background:var(--panel);color:var(--text);border-radius:99px;padding:7px 12px;cursor:pointer;min-height:36px}
+.chips button:active{background:var(--soft)}
+.swap{display:block;width:100%;margin-top:12px;font:inherit;font-size:15px;font-weight:600;color:var(--ink);background:var(--soft);border:0;border-radius:12px;padding:12px;cursor:pointer;min-height:44px}
+.me-card{text-align:center;padding:22px 12px;border:1.5px solid var(--accent);border-radius:14px;background:var(--soft)}
+.me-card span{display:block;font-size:15px;color:var(--muted)}
+.me-card b{display:block;font-size:26px;margin-top:2px}
+.me-card small{display:block;margin-top:8px;font-size:14px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -61,35 +72,54 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
 <main class="main">
   <section class="panel" id="formPanel" hidden>
     <span class="pill" id="session"></span>
-    <label class="sr" for="q">이름이나 부서로 찾기</label>
-    <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15zm5.5-2 5 5"/></svg>
-      <input type="search" id="q" placeholder="이름이나 부서로 찾기" autocomplete="off"></div>
-    <div class="list" id="list" role="radiogroup" aria-label="내 이름 고르기"></div>
+    <div id="pickBox">
+      <label class="sr" for="q">이름이나 부서로 찾기</label>
+      <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15zm5.5-2 5 5"/></svg>
+        <input type="search" id="q" placeholder="이름이나 부서로 찾기" autocomplete="off"></div>
+      <div class="list" id="list" role="radiogroup" aria-label="내 이름 고르기"></div>
+    </div>
+    <div id="writeBox" hidden>
+      <div class="wfield"><label class="f" for="wDept">부서(소속)</label><input type="text" id="wDept" maxlength="60" autocomplete="off" placeholder="예: 기획예산과"><div class="chips" id="deptChips"></div></div>
+      <div class="wfield"><label class="f" for="wName">이름</label><input type="text" id="wName" maxlength="40" autocomplete="name" placeholder="이름을 써 주세요"></div>
+    </div>
+    <div id="meBox" hidden><div class="me-card"><span id="meDept"></span><b id="meName"></b><small id="meAt"></small></div></div>
     <p class="err" id="err" role="alert"></p>
-    <p class="note">목록에 이름이 없으면 담당자에게 말씀해 주세요.</p>
+    <button type="button" class="swap" id="swap" hidden></button>
+    <p class="note" id="note">목록에 이름이 없으면 담당자에게 말씀해 주세요.</p>
   </section>
   <section class="panel result" id="result" hidden></section>
   <section class="panel full" id="full" hidden></section>
 </main>
 <div class="bottom" id="bottom" hidden><div class="in"><button type="button" class="btn primary big" id="go" disabled>내 이름을 골라 주세요</button></div></div>
 <script src="config.js"></script>
-<script src="assets/common.js"></script>
-<script src="assets/sound.js"></script>
+<script src="assets/common.js?v=20261114"></script>
+<script src="assets/sound.js?v=20261114"></script>
 <script>
 (function(){
   'use strict';
   const $ = id => document.getElementById(id), A = window.App;
   const PREVIEW = A.query('preview') === '1', eventId = A.query('e');
-  let cfg, roster = [], session = null, chosen = null;
+  const DEVICE = PREVIEW ? null : A.deviceId();
+  let cfg, roster = [], people = [], depts = [], session = null, chosen = null;
+  let view = 'pick';          // pick 명단에서 고르기 / write 직접 쓰기 / me 내 퇴실
+  let enter = null, pass = null, legacy = false, meP = null;
 
   function show(which){ ['formPanel','result','full'].forEach(id => $(id).hidden = id !== which); $('bottom').hidden = which !== 'formPanel'; }
   function full(t, m){ $('full').innerHTML = `<h2>${A.esc(t)}</h2><p class="hint">${A.esc(m)}</p>`; show('full'); }
+  const isOut = () => !!(session && session.mode === 'out');
+  const word = () => isOut() ? '퇴실' : '출석';
+  const strictOn = () => !!(enter && enter.strict);
+  const canWrite = () => !!(cfg.attend && cfg.attend.walkin) || !roster.length;
+  const store = { get(k){ try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }, del(k){ try { localStorage.removeItem(k); } catch(e){} } };
 
   function apply(ev, assets){
     cfg = A.withDefaults(ev.config); roster = ev.roster || []; session = ev.session;
+    people = roster.concat((ev.extras || []).map(x => ({ ...x, rank: '', extra: true })));
+    const set = new Set([...(cfg.attend.depts || []), ...people.map(p => p.dept)].map(d => String(d || '').trim()).filter(Boolean));
+    depts = [...set];
     A.applyColors(document.documentElement, cfg.screen.bg, cfg.screen.accent);
     document.title = (cfg.join.title || '출석') + ' · ' + (cfg.title || '');
-    const out = session && session.mode === 'out';
+    const out = isOut();
     $('title').textContent = out ? '퇴실 체크' : (cfg.join.title || '출석 체크');
     $('subtitle').textContent = [cfg.subtitle, cfg.title].filter(Boolean).join(' · ');
     $('logo').innerHTML = assets && assets.logo ? `<img src="${assets.logo}" alt="">` : '';
@@ -98,22 +128,51 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
   }
   function renderList(q){
     q = q.trim().toLowerCase();
-    const hits = roster.filter(p => !q || (p.name + ' ' + p.dept).toLowerCase().includes(q));
+    const hits = people.filter(p => !q || (p.name + ' ' + p.dept).toLowerCase().includes(q));
     const shown = hits.slice(0, 80);
     $('list').innerHTML = shown.length ? shown.map(p => `<label class="who"><input type="radio" name="who" value="${p.no}" ${chosen === p.no ? 'checked' : ''}>
       <span class="dot" aria-hidden="true"></span><span class="t"><b>${A.esc(p.name)}</b><span>${A.esc(p.dept)}${p.rank ? ' · ' + A.esc(p.rank) : ''}</span></span></label>`).join('')
       + (hits.length > shown.length ? `<p class="empty">${hits.length - shown.length}명 더 있어요. 이름을 더 입력해 주세요.</p>` : '')
-      : '<p class="empty">찾는 이름이 없어요</p>';
+      : `<p class="empty">찾는 이름이 없어요${canWrite() ? '. 아래 "명단에 없어요"를 눌러 주세요' : ''}</p>`;
+  }
+  function renderChips(){
+    const q = $('wDept').value.trim().toLowerCase();
+    const hits = depts.filter(d => d.toLowerCase().includes(q) && d.toLowerCase() !== q).slice(0, 8);
+    $('deptChips').innerHTML = hits.map(d => `<button type="button" data-d="${A.esc(d)}">${A.esc(d)}</button>`).join('');
+  }
+  function updateGo(){
+    const go = $('go'); $('err').textContent = '';
+    if (view === 'me') { go.disabled = false; go.textContent = `${meP.name} 님 퇴실하기`; return; }
+    if (view === 'write') {
+      const n = $('wName').value.trim(), d = $('wDept').value.trim();
+      go.disabled = !(n && d); go.textContent = n && d ? `${n} 님으로 ${word()}` : '부서와 이름을 써 주세요'; return;
+    }
+    const p = people.find(x => x.no === chosen);
+    go.disabled = !p; go.textContent = p ? `${p.name} 님으로 ${word()}` : '내 이름을 골라 주세요';
+  }
+  function setView(v){
+    view = v;
+    $('pickBox').hidden = v !== 'pick'; $('writeBox').hidden = v !== 'write'; $('meBox').hidden = v !== 'me';
+    const sw = $('swap');
+    if (v === 'pick') { sw.hidden = !canWrite(); sw.textContent = '명단에 없어요 · 직접 쓰기'; $('note').textContent = canWrite() ? '' : '목록에 이름이 없으면 담당자에게 말씀해 주세요.'; }
+    else if (v === 'write') { sw.hidden = !people.length; sw.textContent = '명단에서 고르기'; $('note').textContent = '쓴 이름이 강의실 화면에 나와요.'; renderChips(); }
+    else { sw.hidden = strictOn(); sw.textContent = '내가 아니에요 · 다른 이름 고르기'; $('note').textContent = strictOn() ? '입실한 휴대폰에서만 퇴실할 수 있어요.' : '';
+      $('meDept').textContent = meP.dept || ''; $('meName').textContent = meP.name + ' 님'; $('meAt').textContent = meP.at ? A.hhmm(meP.at) + ' 입실' : ''; }
+    updateGo();
   }
   $('q').addEventListener('input', e => renderList(e.target.value));
-  $('list').addEventListener('change', e => {
-    chosen = +e.target.value; const p = roster.find(x => x.no === chosen);
-    $('go').disabled = false; $('go').textContent = `${p.name} 님으로 ${isOut() ? '퇴실' : '출석'}`; $('err').textContent = '';
-  });
+  $('list').addEventListener('change', e => { chosen = +e.target.value; updateGo(); });
+  $('wName').addEventListener('input', updateGo);
+  $('wDept').addEventListener('input', () => { renderChips(); updateGo(); });
+  $('deptChips').addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (!b) return; $('wDept').value = b.dataset.d; renderChips(); updateGo(); $('wName').focus(); });
+  $('swap').addEventListener('click', () => { if (view === 'pick') setView('write'); else { chosen = null; renderList(''); setView('pick'); } });
 
-  const isOut = () => !!(session && session.mode === 'out');
   const doneKey = kind => 'done:' + (session && session.id) + (kind === 'out' ? ':out' : '');
   function certUrl(p){ return A.siteBase() + 'cert.html?e=' + encodeURIComponent(eventId || 'preview') + '&p=' + p.no; }
+  function backToForm(){
+    chosen = null; meP = null; renderList('');
+    setView(roster.length ? 'pick' : 'write'); show('formPanel');
+  }
   function showResult(r){
     const dup = r.status === 'dup', out = r.kind === 'out';
     const certOk = cfg.cert.enabled && (cfg.cert.only_attendees !== 'inout' || out);
@@ -122,29 +181,44 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
       <h2>${A.esc(out ? (dup ? '이미 퇴실했습니다' : '퇴실했습니다') : (dup ? '이미 출석했습니다' : cfg.join.ok_title))}</h2>
       <div class="who-line">${A.esc(r.dept)} ${A.esc(r.name)} 님</div>
       <p class="meta">${A.esc(r.session || '')} · ${out && r.in_at ? A.hhmm(r.in_at) + ' 입실 · ' : ''}${r.at ? A.hhmm(r.at) : ''} ${out ? '퇴실' : dup ? '제출' : '출석'}</p>
-      ${dup ? '' : out ? `<p class="hint2">${r.in_at ? '오늘도 수고하셨습니다!' : '입실 기록이 없어요. 담당자에게 말씀해 주세요.'}</p>` : `<p class="hint2">${A.esc(cfg.join.ok_hint)}</p>`}
+      ${dup ? '' : out ? `<p class="hint2">${r.in_at ? '오늘도 수고하셨습니다!' : '입실 기록이 없어요. 담당자에게 말씀해 주세요.'}</p>` : `<p class="hint2">${A.esc(cfg.join.ok_hint)}${cfg.screen.checkout === 'on' && strictOn() ? '<br>끝날 때 이 휴대폰으로 QR을 한 번 더 찍어 퇴실해 주세요.' : ''}</p>`}
       ${certOk ? `<a class="btn primary big" href="${certUrl(r)}" target="_blank" rel="noopener">${A.esc(cfg.cert.button || '위촉장 받기')}</a>` : ''}
       <br><button type="button" class="again" id="again">내 이름이 아니에요</button>`;
     show('result');
-    $('again').onclick = () => { try { localStorage.removeItem(doneKey(r.kind)); } catch(e){} chosen = null; $('go').disabled = true; $('go').textContent = '내 이름을 골라 주세요'; renderList(''); show('formPanel'); };
+    $('again').onclick = async () => {
+      if (strictOn() && !PREVIEW) {   // 한 휴대폰 한 사람: 낸 것을 되돌려야 다시 고를 수 있다
+        const ok = await A.dialog({ title: '다시 고르기', message: `${r.name} 님으로 낸 ${out ? '퇴실' : '출석'}을 되돌리고 다시 고를까요?`, ok: '되돌리고 다시 고르기' });
+        if (!ok) return;
+        try { const u = await A.rpc('undo_my_attendance', { p_id: eventId, p_device: DEVICE }); if (u && u.status === 'error') throw new Error(u.message); }
+        catch (e) { A.toast(e.message || '되돌리지 못했어요', 'bad'); return; }
+      }
+      store.del(doneKey(r.kind)); store.del('me:' + eventId);
+      backToForm();
+    };
     if (!dup) { try { Sound.sfx('phone'); } catch (e) {} }
     if (!dup) A.confetti({ count: 90, colors: [cfg.screen.accent, '#ffd43b', '#51cf66', '#4dabf7'] });
   }
 
   $('go').addEventListener('click', async () => {
-    if (!chosen) return;
+    const write = view === 'write';
+    if (!write && !chosen) return;
     const btn = $('go'); btn.disabled = true; btn.textContent = '제출하는 중…';
     try { Sound.configure('sfx'); Sound.unlock(); } catch (e) {}   // 누른 순간 소리 준비 (휴대폰은 효과음만)
     try {
-      const r = PREVIEW ? { ...roster.find(x => x.no === chosen), status: 'ok', session: session.label, at: new Date().toISOString() }
-                        : await A.rpc('submit_attendance', { p_id: eventId, p_no: chosen });
-      if (r.status === 'error') throw new Error(r.message);
-      try { if (!PREVIEW) localStorage.setItem(doneKey(r.kind), JSON.stringify(r)); } catch(e){}
+      let r;
+      if (PREVIEW) r = { ...(write ? { no: 0, dept: $('wDept').value.trim(), name: $('wName').value.trim() } : people.find(x => x.no === chosen)), status: 'ok', session: session.label, at: new Date().toISOString() };
+      else if (legacy) r = await A.rpc('submit_attendance', { p_id: eventId, p_no: chosen });
+      else r = await A.rpc('submit_attendance2', { p_id: eventId, p_no: write ? null : chosen, p_dept: write ? $('wDept').value : null, p_name: write ? $('wName').value : null, p_device: DEVICE, p_pass: pass });
+      if (r.status === 'error') {
+        if (r.code === 'qr') { full('QR이 바뀌었어요', '강의실 화면의 QR을 다시 찍어 주세요.'); return; }
+        throw new Error(r.message);
+      }
+      if (!PREVIEW) { store.set(doneKey(r.kind), r); store.set('me:' + eventId, { no: r.no, dept: r.dept, name: r.name }); }
       if (r.kind && session && (r.kind === 'out') !== isOut()) { session.mode = r.kind; }
       showResult(r);
     } catch (e) {
+      updateGo();
       $('err').textContent = e.message || '제출하지 못했습니다. 다시 눌러 주세요.';
-      btn.disabled = false; btn.textContent = '다시 제출';
     }
   });
 
@@ -154,10 +228,10 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
       addEventListener('message', e => {
         if (e.origin !== location.origin || !e.data || e.data.type !== 'preview') return;
         clearInterval(ping);
-        const ev = e.data.event;
-        const r = ev.roster && ev.roster.length ? ev.roster : [{ no: 1, dept: '스마트정보과', rank: '', name: '김가람' }, { no: 2, dept: '감사담당관', rank: '', name: '이나래' }];
+        const ev = e.data.event, walk = ev.config.attend && ev.config.attend.walkin;
+        const r = ev.roster && ev.roster.length ? ev.roster : walk ? [] : [{ no: 1, dept: '스마트정보과', rank: '', name: '김가람' }, { no: 2, dept: '감사담당관', rank: '', name: '이나래' }];
         apply({ config: ev.config, roster: r, session: { id: 'p', label: ev.config.first_session || '1회차' } }, e.data.assets);
-        show('formPanel');
+        chosen = null; setView(r.length ? 'pick' : 'write'); show('formPanel');
       });
       parent.postMessage({ type: 'preview-ready', page: 'join' }, location.origin);
       return;
@@ -169,13 +243,27 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
       if (!ev) return full('행사를 찾을 수 없습니다', '강의실 화면의 QR을 다시 찍어 주세요.');
       const assets = ev.assets.includes('logo') ? await A.loadAssets(eventId, ['logo']) : {};
       apply(ev, assets);
-      const out = isOut();
-      let done = null, mine = null;
-      try { done = JSON.parse(localStorage.getItem(doneKey(out ? 'out' : 'in')) || 'null'); mine = JSON.parse(localStorage.getItem(doneKey('in')) || 'null'); } catch(e){}
-      if (done) { showResult({ kind: out ? 'out' : 'in', ...done, status: 'dup' }); return; }
-      if (out && mine && roster.some(p => p.no === mine.no)) {   // 입실한 휴대폰이면 내 이름을 미리 골라 둔다
-        chosen = mine.no; renderList(''); $('go').disabled = false; $('go').textContent = `${mine.name} 님으로 퇴실`;
+      // 이 휴대폰이 이미 냈는지, (바뀌는 QR이면) 방금 찍은 QR이 맞는지 저장소에 묻는다. 저장소가 옛 버전이면 예전 방식으로
+      try { enter = await A.rpc('join_enter', { p_id: eventId, p_device: DEVICE, p_code: A.query('c') }); } catch (e) { enter = null; legacy = true; }
+      if (enter) { pass = enter.pass; if (enter.mode && session) { session.mode = enter.mode; apply(ev, assets); } }
+      const out = isOut(), qrOld = () => full('QR이 바뀌었어요', '강의실 화면의 QR을 다시 찍어 주세요.');
+      if (strictOn() && enter.me) {   // 한 휴대폰 한 사람: 저장소가 기억하는 내 출석
+        const me = enter.me;
+        if (!out) return showResult({ kind: 'in', ...me, status: 'dup' });
+        if (me.out_at) return showResult({ kind: 'out', ...me, status: 'dup', at: me.out_at, in_at: me.at });
+        if (enter.rotate && !enter.code_ok) return qrOld();
+        meP = me; chosen = me.no; setView('me'); show('formPanel'); return;
       }
+      if (enter && enter.rotate && !enter.code_ok) return qrOld();
+      const done = strictOn() ? null : store.get(doneKey(out ? 'out' : 'in'));
+      if (done) { showResult({ kind: out ? 'out' : 'in', ...done, status: 'dup' }); return; }
+      // 전에 낸 내 이름을 미리 골라 둔다 (지난 회차·입실한 휴대폰)
+      const mine = store.get(doneKey('in')) || store.get('me:' + eventId);
+      if (mine && people.some(p => p.no === mine.no)) {
+        if (out && !strictOn()) { meP = { ...mine, at: (store.get(doneKey('in')) || {}).at }; chosen = mine.no; setView('me'); show('formPanel'); return; }
+        chosen = mine.no; renderList('');
+      } else if (mine && canWrite()) { $('wDept').value = mine.dept || ''; $('wName').value = mine.name || ''; }
+      setView(roster.length ? 'pick' : 'write');
       show('formPanel');
     } catch (e) { full('불러오지 못했습니다', e.message); }
   })();
