@@ -422,6 +422,8 @@
       if (this._useFiles !== false && typeof Audio !== 'undefined') {
         if (this._playing) return;
         const e = this.eng, c = this.ctx; this._playing = true; this._queue = this._playlist();
+        // 처음 한 번만 조그맣게 알려 준다
+        if (!this._told) { this._told = true; try { g.App && g.App.toast && g.App.toast('🎵 다른 창으로 바꾸거나 최소화하면 음악이 저절로 멈추고, 돌아오면 다시 나와요'); } catch (x) {} }
         e.bgm.gain.cancelScheduledValues(c.currentTime); e.bgm.gain.setValueAtTime(0.0001, c.currentTime); e.bgm.gain.linearRampToValueAtTime(0.55 * this.user.vol, c.currentTime + 2);
         this._playNext(); return;
       }
@@ -458,7 +460,7 @@
       if (this.mode === 'off') { d.hidden = true; return; } d.hidden = false;
       d.className = 'snd' + (this.unlocked ? '' : ' locked');
       d.innerHTML = this.unlocked
-        ? `${this.mode === 'both' ? `<button type="button" data-a="bgm" class="${this.user.bgm ? 'on' : ''}" aria-pressed="${this.user.bgm}">🎵 음악</button>` : ''}<button type="button" data-a="sfx" class="${this.user.sfx ? 'on' : ''}" aria-pressed="${this.user.sfx}">🔔 효과음</button>${this.mode === 'both' ? `<input type="range" min="0" max="1" step="0.05" value="${this.user.vol}" aria-label="음악 크기">` : ''}`
+        ? `${this.mode === 'both' ? `<button type="button" data-a="bgm" class="${this.user.bgm ? 'on' : ''}" aria-pressed="${this.user.bgm}" title="다른 창으로 바꾸거나 최소화하면 저절로 멈추고, 돌아오면 다시 나와요 (키보드 M: 끄기·켜기)">🎵 음악</button>` : ''}<button type="button" data-a="sfx" class="${this.user.sfx ? 'on' : ''}" aria-pressed="${this.user.sfx}">🔔 효과음</button>${this.mode === 'both' ? `<input type="range" min="0" max="1" step="0.05" value="${this.user.vol}" aria-label="음악 크기">` : ''}`
         : `<button type="button" data-a="go" class="go">🔊 소리 켜기</button>`;
     }
   };
