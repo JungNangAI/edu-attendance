@@ -132,3 +132,15 @@ table.roster th{background:var(--soft);position:sticky;top:0}
 .more-set>summary::-webkit-details-marker{display:none}
 .more-set>summary::before{content:'▸ ';color:var(--muted)}.more-set[open]>summary::before{content:'▾ '}
 .more-set>summary span{font-weight:400;font-size:13px;color:var(--muted);margin-left:6px}
+
+/* 4단계 선택 기능: 켠 것만 펼쳐진다 */
+.opt-sec{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}
+.opt-box{margin:8px 0 0 4px}.opt-box[hidden]{display:none}
+.hint-inline{font-weight:400;font-size:13px;color:var(--muted);margin-left:4px}
+.q-list{display:grid;gap:10px;margin:10px 0}
+.q-item{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff;display:grid;gap:8px}
+.q-item .q-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.q-item .q-row input[type=text]{flex:1;min-width:180px}
+.q-item select{width:auto}
+.q-item textarea{min-height:54px}
+.q-item .q-del{margin-left:auto}

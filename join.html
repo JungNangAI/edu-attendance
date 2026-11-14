@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
-<link rel="stylesheet" href="assets/common.css?v=20261114">
+<link rel="stylesheet" href="assets/common.css?v=20261115">
 <style>
 body{background:var(--bg);min-height:100vh;min-height:100dvh}
 .head{background:var(--accent);color:var(--on-accent);padding:22px max(16px,env(safe-area-inset-left)) 46px;position:relative;overflow:hidden}
@@ -68,6 +68,22 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
 .me-card span{display:block;font-size:15px;color:var(--muted)}
 .me-card b{display:block;font-size:26px;margin-top:2px}
 .me-card small{display:block;margin-top:8px;font-size:14px;color:var(--muted)}
+/* 만족도 조사 */
+.survey{padding:20px 18px 26px}
+.survey .sv-top{text-align:center;margin-bottom:14px}
+.survey .sv-top .done{display:inline-block;font-size:13px;font-weight:700;color:#1f7a4d;background:#e6f6ec;border-radius:99px;padding:4px 12px;margin-bottom:8px}
+.survey .sv-top h2{font-size:21px;margin:0}
+.survey .sv-top p{margin:6px 0 0;color:var(--muted);font-size:14px}
+.sv-q{padding:14px 0;border-top:1px solid var(--line)}
+.sv-q .qt{font-weight:700;font-size:16px;margin-bottom:10px}
+.sv-q .qt em{font-style:normal;color:var(--bad);font-size:13px;margin-left:4px}
+.stars{display:flex;gap:6px;justify-content:space-between}
+.stars button{flex:1;font-size:30px;line-height:1;padding:8px 0;border:1.5px solid var(--line);border-radius:12px;background:var(--panel);color:#d5d8e0;cursor:pointer;min-height:52px}
+.stars button.on{color:#f5b301;border-color:#f5b301;background:#fff9e6}
+.stars-l{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:4px}
+.sv-q textarea{width:100%;min-height:72px;font:inherit;font-size:16px}
+.survey .chips button.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.survey .send{margin-top:16px}
 </style>
 </head>
 <body>
@@ -91,12 +107,13 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
     <p class="note" id="note">목록에 이름이 없으면 담당자에게 말씀해 주세요.</p>
   </section>
   <section class="panel result" id="result" hidden></section>
+  <section class="panel survey" id="survey" hidden></section>
   <section class="panel full" id="full" hidden></section>
 </main>
 <div class="bottom" id="bottom" hidden><div class="in"><button type="button" class="btn primary big" id="go" disabled>내 이름을 골라 주세요</button></div></div>
 <script src="config.js"></script>
-<script src="assets/common.js?v=20261114"></script>
-<script src="assets/sound.js?v=20261114"></script>
+<script src="assets/common.js?v=20261115"></script>
+<script src="assets/sound.js?v=20261115"></script>
 <script>
 (function(){
   'use strict';
@@ -107,7 +124,7 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
   let view = 'pick';          // pick 명단에서 고르기 / write 직접 쓰기 / me 내 퇴실
   let enter = null, pass = null, legacy = false, meP = null;
 
-  function show(which){ ['formPanel','result','full'].forEach(id => $(id).hidden = id !== which); $('bottom').hidden = which !== 'formPanel'; }
+  function show(which){ ['formPanel','result','full','survey'].forEach(id => $(id).hidden = id !== which); $('bottom').hidden = which !== 'formPanel'; }
   function full(t, m){ $('full').innerHTML = `<img class="mascot" src="assets/defaults/call.png" alt=""><h2>${A.esc(t)}</h2><p class="hint">${A.esc(m)}</p>`; show('full'); }
   const isOut = () => !!(session && session.mode === 'out');
   const word = () => isOut() ? '퇴실' : '출석';
@@ -176,7 +193,51 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
     chosen = null; meP = null; renderList('');
     setView(roster.length ? 'pick' : 'write'); show('formPanel');
   }
+  /* 만족도 조사: 퇴실하면서, 또는 담당자가 '만족도 받기 시작'을 눌렀을 때. 이번 회차에 출석한 휴대폰만 한 번 */
+  const surveyOn = () => !!(cfg && cfg.survey && cfg.survey.on && (cfg.survey.questions || []).length) && !legacy && !PREVIEW;
+  function thanks(dup){
+    $('result').className = 'panel result';
+    $('result').innerHTML = `<img class="mascot" src="assets/defaults/geuljuim_attend.png" alt=""><h2>${dup ? '이미 답하셨어요' : '소중한 의견 고맙습니다!'}</h2><p class="meta">${dup ? '이번 회차 만족도 조사는 한 번만 낼 수 있어요.' : '보내 주신 의견은 다음 교육을 더 좋게 만드는 데 써요.'}</p>`;
+    show('result'); if (!dup) A.confetti({ count: 60, colors: [cfg.screen.accent, '#ffd43b', '#51cf66'] });
+  }
+  function showSurvey(r, after){
+    const qs = cfg.survey.questions, ans = {};
+    $('survey').innerHTML = `<div class="sv-top">${r ? `<span class="done">✓ ${A.esc(r.name)} 님 ${r.kind === 'out' ? '퇴실' : '출석'} 완료</span>` : ''}<h2>오늘 교육은 어땠나요?</h2><p>${qs.length}문항 · 1분이면 끝나요${cfg.survey.anon ? ' · 익명' : ''}</p></div>`
+      + qs.map(q => `<div class="sv-q" data-id="${A.esc(q.id)}" data-type="${q.type}"><div class="qt">${A.esc(q.q)}${q.req ? '<em>필수</em>' : ''}</div>${
+        q.type === 'star' ? `<div class="stars">${[1, 2, 3, 4, 5].map(n => `<button type="button" data-v="${n}" aria-label="${n}점">★</button>`).join('')}</div><div class="stars-l"><span>아쉬워요</span><span>아주 좋아요</span></div>`
+        : q.type === 'text' ? `<textarea maxlength="500" placeholder="자유롭게 써 주세요"></textarea>`
+        : `<div class="chips">${(q.options || []).map(o => `<button type="button" data-v="${A.esc(o)}">${A.esc(o)}</button>`).join('')}</div>`}</div>`).join('')
+      + `<p class="err" id="svErr" role="alert"></p><button type="button" class="btn primary big send" id="svSend">보내기</button>${r ? '<button type="button" class="again" id="svSkip">다음에 할게요</button>' : ''}`;
+    show('survey');
+    $('survey').onclick = e => {
+      const b = e.target.closest('[data-v]'), box = e.target.closest('.sv-q'); if (!b || !box) return;
+      const id = box.dataset.id, t = box.dataset.type;
+      if (t === 'star') { ans[id] = +b.dataset.v; box.querySelectorAll('[data-v]').forEach(x => x.classList.toggle('on', +x.dataset.v <= ans[id])); }
+      else if (t === 'one') { ans[id] = b.dataset.v; box.querySelectorAll('[data-v]').forEach(x => x.classList.toggle('on', x === b)); }
+      else { b.classList.toggle('on'); ans[id] = [...box.querySelectorAll('.on')].map(x => x.dataset.v); }
+    };
+    if ($('svSkip')) $('svSkip').onclick = () => after && after();
+    $('svSend').onclick = async () => {
+      $('survey').querySelectorAll('.sv-q[data-type="text"]').forEach(box => { const v = box.querySelector('textarea').value.trim(); if (v) ans[box.dataset.id] = v; else delete ans[box.dataset.id]; });
+      const miss = qs.find(q => q.req && (ans[q.id] == null || (Array.isArray(ans[q.id]) && !ans[q.id].length)));
+      if (miss) { $('svErr').textContent = `'${miss.q}'에 답해 주세요`; return; }
+      const btn = $('svSend'); btn.disabled = true; btn.textContent = '보내는 중…';
+      try {
+        const x = await A.rpc('submit_survey', { p_id: eventId, p_device: DEVICE, p_answers: ans });
+        if (x.status === 'error') throw new Error(x.message);
+        store.set('sv:' + (session && session.id), 1);
+        thanks(x.status === 'dup');
+      } catch (er) { btn.disabled = false; btn.textContent = '보내기'; $('svErr').textContent = er.message || '보내지 못했어요. 다시 눌러 주세요.'; }
+    };
+  }
+
   function showResult(r){
+    if (r.kind === 'out' && r.status !== 'dup' && surveyOn() && !(enter && enter.answered) && !store.get('sv:' + (session && session.id))) {
+      return showSurvey(r, () => showResultCore(r));
+    }
+    showResultCore(r);
+  }
+  function showResultCore(r){
     const dup = r.status === 'dup', out = r.kind === 'out';
     const certOk = cfg.cert.enabled && (cfg.cert.only_attendees !== 'inout' || out);
     $('result').className = 'panel result' + (dup ? ' dup' : '');
@@ -250,6 +311,13 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
       // 이 휴대폰이 이미 냈는지, (바뀌는 QR이면) 방금 찍은 QR이 맞는지 저장소에 묻는다. 저장소가 옛 버전이면 예전 방식으로
       try { enter = await A.rpc('join_enter', { p_id: eventId, p_device: DEVICE, p_code: A.query('c') }); } catch (e) { enter = null; legacy = true; }
       if (enter) { pass = enter.pass; if (enter.mode && session) { session.mode = enter.mode; apply(ev, assets); } }
+      if (session && session.mode === 'survey') {   // 담당자가 '만족도 받기 시작'을 누른 동안: 같은 QR이 설문
+        $('title').textContent = '만족도 조사'; $('session').textContent = session.label;
+        if (!surveyOn()) return full('지금은 출석을 받지 않아요', '담당자에게 말씀해 주세요.');
+        if ((enter && enter.answered) || store.get('sv:' + session.id)) return thanks(true);
+        if (enter && !enter.me && strictOn()) return full('출석한 사람만 답할 수 있어요', '이번 회차에 이 휴대폰으로 출석한 사람만 만족도 조사에 답할 수 있어요.');
+        return showSurvey(null, null);
+      }
       const out = isOut(), qrOld = () => full('QR이 바뀌었어요', '강의실 화면의 QR을 다시 찍어 주세요.');
       if (strictOn() && enter.me) {   // 한 휴대폰 한 사람: 저장소가 기억하는 내 출석
         const me = enter.me;

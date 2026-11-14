@@ -66,6 +66,19 @@ alter table events     add column if not exists keep_days  int not null default 
 alter table events     add column if not exists last_used  timestamptz not null default now(); -- 마지막으로 쓴 때(연락처는 여기서 10일 뒤 먼저 지움)
 create index if not exists attendance_device on attendance(session_id, device);
 
+-- 만족도 조사 응답 (나중에 추가된 표). 익명이면 이름(person_no)을 저장하지 않고, rkey도 출석 기록과 이어지지 않는 값
+create table if not exists responses (
+  id         bigserial primary key,
+  event_id   uuid not null references events(id) on delete cascade,
+  session_id uuid not null references sessions(id) on delete cascade,
+  person_no  int,
+  rkey       text not null,
+  answers    jsonb not null,
+  created_at timestamptz not null default now(),
+  unique (session_id, rkey)
+);
+create index if not exists responses_event on responses(event_id);
+
 create table if not exists assets (              -- 올린 이미지(로고·배경·직인 등). 브라우저에서 줄여 data URL로 저장
   event_id uuid not null references events(id) on delete cascade,
   key      text not null,
@@ -80,13 +93,14 @@ alter table sessions     enable row level security;
 alter table attendance   enable row level security;
 alter table assets       enable row level security;
 alter table extras       enable row level security;
-revoke all on app_settings, events, sessions, attendance, assets, extras from public;
+alter table responses    enable row level security;
+revoke all on app_settings, events, sessions, attendance, assets, extras, responses from public;
 do $$ begin
   if exists (select 1 from pg_roles where rolname = 'anon') then
-    execute 'revoke all on app_settings, events, sessions, attendance, assets, extras from anon';
+    execute 'revoke all on app_settings, events, sessions, attendance, assets, extras, responses from anon';
   end if;
   if exists (select 1 from pg_roles where rolname = 'authenticated') then
-    execute 'revoke all on app_settings, events, sessions, attendance, assets, extras from authenticated';
+    execute 'revoke all on app_settings, events, sessions, attendance, assets, extras, responses from authenticated';
   end if;
 end $$;
 
@@ -306,6 +320,8 @@ begin
     if code_ok then x := floor(extract(epoch from now()))::bigint + 900; pass := x || '.' || _pass_sig(sec, d, x); end if;
   end if;
   return jsonb_build_object('me', me, 'pass', pass, 'code_ok', code_ok, 'mode', s.mode,
+                            'answered', p_device is not null and exists (select 1 from responses r where r.session_id = s.id
+                                          and r.rkey = encode(digest(p_device || '|svy|' || s.id::text, 'sha256'), 'hex')),
                             'strict', _opt(e, 'one_phone'), 'rotate', _opt(e, 'rotate_qr'));
 end $$;
 
@@ -441,14 +457,19 @@ begin
                                       where x.event_id = a.event_id and x.no = a.person_no), '{}'::jsonb) order by a.at)
                       from attendance a where a.session_id = s.id and a.at is not null), '[]'::jsonb),
     'outs', coalesce((select jsonb_agg(jsonb_build_object('no', a.person_no, 'at', a.out_at) order by a.out_at)
-                      from attendance a where a.session_id = s.id and a.out_at is not null), '[]'::jsonb));
+                      from attendance a where a.session_id = s.id and a.out_at is not null), '[]'::jsonb),
+    'survey_n', (select count(*) from responses r where r.session_id = s.id));
 end $$;
 
 -- 위촉장 "출석한 사람만"일 때: 이 행사의 어느 회차든 출석했는지
 -- "입실·퇴실 모두 한 사람만"(only_attendees = 'inout')이면 한 회차에서 입실과 퇴실을 모두 했는지
 create or replace function check_attended(p_id uuid, p_no int) returns boolean
 language sql security definer set search_path = public, extensions as $$
-  select case when (select config->'cert'->>'only_attendees' from events where id = p_id) = 'inout'
+  select case when (select config->'cert'->>'only_attendees' from events where id = p_id) = 'pass' then   -- 이수 기준을 채운 사람만
+      (select count(distinct a.session_id) from attendance a where a.event_id = p_id and a.person_no = p_no and a.at is not null) * 100.0
+        / greatest(1, (select count(*) from sessions where event_id = p_id))
+        >= coalesce(nullif((select config->'pass'->>'min_pct' from events where id = p_id), '')::numeric, 80)
+    when (select config->'cert'->>'only_attendees' from events where id = p_id) = 'inout'
     then exists(select 1 from attendance where event_id = p_id and person_no = p_no and at is not null and out_at is not null)
     else exists(select 1 from attendance where event_id = p_id and person_no = p_no and at is not null) end;
 $$;
@@ -547,7 +568,9 @@ begin
                         from extras x where x.event_id = p_id), '[]'::jsonb),
     'attendance', coalesce((select jsonb_agg(jsonb_build_object('session_id', session_id, 'no', person_no, 'at', at, 'out_at', out_at,
                               'via', via, 'out_via', out_via, 'dev', left(device, 8), 'out_dev', left(out_device, 8)) order by coalesce(at, out_at))
-                            from attendance where event_id = p_id), '[]'::jsonb));
+                            from attendance where event_id = p_id), '[]'::jsonb),
+    'responses', coalesce((select jsonb_agg(jsonb_build_object('session_id', session_id, 'no', person_no, 'answers', answers) order by rkey)
+                           from responses where event_id = p_id), '[]'::jsonb));
 end $$;
 
 -- 입실/퇴실 받기 바꾸기
@@ -555,7 +578,7 @@ create or replace function set_mode(p_id uuid, p_token text, p_mode text) return
 language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform _admin(p_id, p_token);
-  if p_mode not in ('in', 'out') then raise exception '잘못된 값'; end if;
+  if p_mode not in ('in', 'out', 'survey') then raise exception '잘못된 값'; end if;
   update sessions set mode = p_mode where id = (select current_session from events where id = p_id);
   perform _touch(p_id);
   return get_board(p_id);
@@ -615,6 +638,46 @@ begin
   return e.phones;
 end $$;
 
+-- 만족도 조사 답 내기: 이번 회차에 이 휴대폰으로 출석(또는 퇴실)한 사람만, 한 번만
+create or replace function submit_survey(p_id uuid, p_device text, p_answers jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; s sessions; d text; a attendance; k text; anon boolean; q jsonb; v jsonb; t text; qid text; clean jsonb := '{}'::jsonb; opts jsonb; n int := 0;
+begin
+  select * into e from events where id = p_id and expires_at >= now();
+  if e.id is null then return jsonb_build_object('status', 'error', 'message', '행사를 찾을 수 없습니다'); end if;
+  if coalesce(e.config->'survey'->>'on', '') <> 'true' then return jsonb_build_object('status', 'error', 'message', '만족도 조사를 받지 않는 행사예요'); end if;
+  d := _dev(p_device);
+  if d is null then return jsonb_build_object('status', 'error', 'message', '화면을 새로고침한 뒤 다시 해 주세요'); end if;
+  select * into s from sessions where id = e.current_session;
+  select * into a from attendance where session_id = s.id and (device = d or out_device = d) limit 1;
+  if a.session_id is null then return jsonb_build_object('status', 'error', 'code', 'notin', 'message', '이번 회차에 이 휴대폰으로 출석한 사람만 답할 수 있어요'); end if;
+  k := encode(digest(p_device || '|svy|' || s.id::text, 'sha256'), 'hex');
+  if exists (select 1 from responses where session_id = s.id and rkey = k) then return jsonb_build_object('status', 'dup'); end if;
+  anon := coalesce(e.config->'survey'->>'anon', 'true') <> 'false';
+  for q in select * from jsonb_array_elements(coalesce(e.config->'survey'->'questions', '[]'::jsonb)) loop
+    n := n + 1; exit when n > 10;
+    qid := left(coalesce(q->>'id', ''), 20); t := q->>'type'; v := p_answers->qid; opts := coalesce(q->'options', '[]'::jsonb);
+    if qid = '' then continue; end if;
+    if t = 'star' then
+      if jsonb_typeof(v) = 'number' and (v::text)::numeric between 1 and 5 then clean := clean || jsonb_build_object(qid, round((v::text)::numeric)); else v := null; end if;
+    elsif t = 'one' then
+      if jsonb_typeof(v) = 'string' and opts ? (v #>> '{}') then clean := clean || jsonb_build_object(qid, v); else v := null; end if;
+    elsif t = 'multi' then
+      if jsonb_typeof(v) = 'array' then
+        v := (select coalesce(jsonb_agg(x), '[]'::jsonb) from jsonb_array_elements(v) x where jsonb_typeof(x) = 'string' and opts ? (x #>> '{}'));
+        if jsonb_array_length(v) > 0 then clean := clean || jsonb_build_object(qid, v); else v := null; end if;
+      else v := null; end if;
+    else
+      if jsonb_typeof(v) = 'string' and trim(v #>> '{}') <> '' then clean := clean || jsonb_build_object(qid, left(trim(v #>> '{}'), 500)); else v := null; end if;
+    end if;
+    if v is null and coalesce(q->>'req', '') = 'true' then return jsonb_build_object('status', 'error', 'code', 'req', 'message', '꼭 답해야 하는 문항이 있어요'); end if;
+  end loop;
+  insert into responses(event_id, session_id, person_no, rkey, answers)
+    values (e.id, s.id, case when anon then null else a.person_no end, k, clean)
+    on conflict (session_id, rkey) do nothing;
+  return jsonb_build_object('status', 'ok');
+end $$;
+
 -- 강의실 화면이 몇 초마다 묻는 함수. 지난번과 같으면 '같음'만 짧게 돌려줘 전송량을 줄인다
 create or replace function get_board2(p_id uuid, p_ver text) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
@@ -623,7 +686,8 @@ begin
   select * into e from events where id = p_id and expires_at >= now();
   if e.id is null then return null; end if;
   select * into s from sessions where id = e.current_session;
-  select md5(concat_ws('|', s.id, s.label, s.mode, e.updated_at, count(a.at), max(a.at), count(a.out_at), max(a.out_at)))
+  select md5(concat_ws('|', s.id, s.label, s.mode, e.updated_at, count(a.at), max(a.at), count(a.out_at), max(a.out_at),
+                       (select count(*) from responses r where r.session_id = s.id)))
     into v from attendance a where a.session_id = s.id;
   if p_ver is not null and p_ver = v then return jsonb_build_object('same', true, 'v', v); end if;
   b := get_board(p_id);
@@ -715,7 +779,7 @@ begin
     'set_mode(uuid,text,text)', 'get_phones(uuid,text)',
     'join_enter(uuid,text,text)', 'submit_attendance2(uuid,int,text,text,text,text)', 'undo_my_attendance(uuid,text)',
     'admin_mark(uuid,text,int,text)', 'admin_add(uuid,text,text,text)', 'get_qr(uuid,text)',
-    'get_board2(uuid,text)', 'extend_keep(uuid,text)', 'import_history(uuid,text,jsonb)']
+    'get_board2(uuid,text)', 'extend_keep(uuid,text)', 'import_history(uuid,text,jsonb)', 'submit_survey(uuid,text,jsonb)']
   loop
     if exists (select 1 from pg_roles where rolname = 'anon') then
       execute format('grant execute on function %s to anon', f);

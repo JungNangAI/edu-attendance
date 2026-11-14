@@ -674,23 +674,27 @@
       qrT = setTimeout(refreshQr, ms + 250);
     } catch (e) { qrT = setTimeout(refreshQr, 4000); }
   }
-  function setSession(s) { sessionId = s.id; sessionLabel = s.label; $('session').textContent = s.label + (isOutMode() ? ' · 퇴실 받는 중' : ''); }
+  let surveyN = 0;
+  const modeSuffix = () => isOutMode() ? ' · 퇴실 받는 중' : mode === 'survey' ? ' · 만족도 조사 중' + (surveyN ? ` · 응답 ${surveyN}명` : '') : '';
+  function setSession(s) { sessionId = s.id; sessionLabel = s.label; $('session').textContent = s.label + modeSuffix(); }
   // 입실/퇴실 받기 화면 바꾸기
   function applyMode(m) {
-    mode = m === 'out' ? 'out' : 'in';
-    document.body.classList.toggle('mode-out', isOutMode());
+    mode = m === 'out' || m === 'survey' ? m : 'in';
+    document.body.classList.toggle('mode-out', isOutMode()); document.body.classList.toggle('mode-survey', mode === 'survey');
     const t = cfg.screen.texts;
-    $('chip').textContent = isOutMode() ? '퇴실 체크' : (t.chip || '출석 체크');
-    $('qrHint').textContent = isOutMode() ? '수업이 끝났어요. QR을 찍고 퇴실해 주세요' : qrHint();
-    if (sessionLabel) $('session').textContent = sessionLabel + (isOutMode() ? ' · 퇴실 받는 중' : '');
+    $('chip').textContent = isOutMode() ? '퇴실 체크' : mode === 'survey' ? '만족도 조사' : (t.chip || '출석 체크');
+    $('qrHint').textContent = isOutMode() ? '수업이 끝났어요. QR을 찍고 퇴실해 주세요' : mode === 'survey' ? '오늘 교육은 어땠나요?\nQR을 찍고 답해 주세요' : qrHint();
+    if (sessionLabel) $('session').textContent = sessionLabel + modeSuffix();
     modeBtn();
     markLeft(); setCount(displayed.length, false);
   }
   // 퇴실 체크를 쓰는 행사에서만 버튼을 보인다 (퇴실 받는 중이면 되돌릴 수 있게 항상 보임)
   function modeBtn() {
     const b = $('aMode'); if (!b) return;
-    b.hidden = !(cfg.screen.checkout === 'on' || isOutMode());
+    b.hidden = mode === 'survey' || !(cfg.screen.checkout === 'on' || isOutMode());
     b.textContent = isOutMode() ? '입실 받기로 돌아가기' : '퇴실 받기 시작';
+    const sv = $('aSurvey'); if (sv) { sv.hidden = !(cfg.survey && cfg.survey.on) && mode !== 'survey'; sv.textContent = mode === 'survey' ? '출석 받기로 돌아가기' : '만족도 받기 시작'; }
+    const lo = $('aLottery'); if (lo) lo.hidden = !cfg.lottery;
   }
   // 새로 퇴실한 사람: 칸 불을 끄고 "수고하셨습니다" 배너
   let leaveQ = [], leaving = false;
@@ -770,6 +774,7 @@
         const p = { no: x.no, dept: x.dept || '', rank: '', name: x.name, extra: true }; extraMap.set(x.no, p); byNo.set(x.no, p);
       });
       const newMode = b.session.mode || 'in';
+      if ((b.survey_n || 0) !== surveyN) { surveyN = b.survey_n || 0; if (mode === 'survey' && sessionLabel) $('session').textContent = sessionLabel + modeSuffix(); }
       if (b.session.id !== sessionId) {
         const had = sessionId !== null;
         outSet = new Set(); leaveQ = [];
@@ -901,6 +906,48 @@
     try { await A.rpc('set_mode', { p_id: eventId, p_token: token, p_mode: toOut ? 'out' : 'in' }); applyMode(toOut ? 'out' : 'in'); A.toast(toOut ? '퇴실을 받고 있어요' : '입실을 받고 있어요', 'ok'); }
     catch (e) { A.toast(e.message, 'bad'); }
   }
+  async function toggleSurvey() {
+    const on = mode !== 'survey';
+    const ok = await A.dialog(on
+      ? { title: '만족도 받기 시작', message: '같은 QR을 찍으면 이제 만족도 조사가 열려요.\n이번 회차에 출석한 휴대폰만 한 번 답할 수 있어요.', ok: '만족도 받기 시작' }
+      : { title: '출석 받기로 돌아가기', message: '같은 QR을 찍으면 다시 출석으로 기록됩니다.', ok: '출석 받기로' });
+    if (!ok) return;
+    try { await A.rpc('set_mode', { p_id: eventId, p_token: token, p_mode: on ? 'survey' : 'in' }); applyMode(on ? 'survey' : 'in'); A.toast(on ? '만족도 조사를 받고 있어요' : '출석을 받고 있어요', 'ok'); }
+    catch (e) { A.toast(/잘못된 값/.test(e.message) ? '만족도 조사는 저장소 업데이트(update.sql) 뒤에 쓸 수 있어요' : e.message, 'bad'); }
+  }
+  /* 글주임 경품 추첨: 이번 회차 출석자 중에서. 이름이 돌다가 멈추고 '당첨' 도장이 쾅 */
+  let winners = [];
+  function lottery() {
+    let el = $('lot');
+    if (!el) {
+      el = document.createElement('div'); el.className = 'lot'; el.id = 'lot';
+      el.innerHTML = `<div class="lot-box"><img class="lot-cast" src="assets/defaults/geuljuim_attend.png" alt=""><h2>🎁 글주임 경품 추첨</h2><p class="lot-pool" id="lotPool"></p>
+        <div class="lot-reel"><span class="lot-dept" id="lotDept">&nbsp;</span><b class="lot-name" id="lotName">?</b><span class="lot-stamp" id="lotStamp">당첨</span></div>
+        <div class="lot-btns"><button type="button" class="lot-go" id="lotGo">추첨하기</button><button type="button" class="lot-x" id="lotX">닫기</button></div><p class="lot-win" id="lotWin"></p></div>`;
+      document.body.appendChild(el);
+      $('lotX').onclick = () => { el.hidden = true; };
+      $('lotGo').onclick = spin;
+    }
+    el.hidden = false; poolText();
+  }
+  const pool = () => lastList.map(x => byNo.get(x.no)).filter(p => p && !winners.includes(p.no));
+  function poolText() { $('lotPool').textContent = `이번 회차 출석자 ${lastList.length}명 중${winners.length ? ` (당첨된 ${winners.length}명 빼고)` : ''}`; $('lotWin').textContent = winners.length ? '당첨: ' + winners.map(no => (byNo.get(no) || {}).name).join(', ') : ''; }
+  function spin() {
+    const ps = pool(); if (!ps.length) { A.toast('추첨할 출석자가 없어요', 'bad'); return; }
+    const go = $('lotGo'), stamp = $('lotStamp'); go.disabled = true; stamp.classList.remove('hit');
+    const win = ps[Math.floor(Math.random() * ps.length)]; let t = 0, k = 0; const total = 3200;
+    const tick = () => {
+      const p = t >= total ? win : ps[(k++) % ps.length];
+      $('lotName').textContent = p.name; $('lotDept').textContent = p.dept || '\u00a0';
+      try { if (t < total) Sound.sfx('land'); } catch (e) {}
+      if (t >= total) {
+        void stamp.offsetWidth; stamp.classList.add('hit'); winners.push(win.no); poolText(); go.disabled = false; go.textContent = '한 번 더';
+        try { Sound.sfx('milestone', { pct: 90 }); } catch (e) {} A.confetti({ count: 120 }); return;
+      }
+      const d = 50 + 380 * Math.pow(t / total, 2.4); t += d; setTimeout(tick, d);
+    };
+    tick();
+  }
   async function exportAll() {
     try {
       await needXlsx();
@@ -908,22 +955,64 @@
       const ss = d.sessions, map = new Map(), shared = new Map();
       d.attendance.forEach(a => map.set(a.session_id + ':' + a.no, a));
       ss.forEach(s2 => shared.set(s2.id, sharedOf(d.attendance.filter(a => a.session_id === s2.id))));
-      const head = ['연번', '부서명', '직위(직급)', '성명', ...ss.map(s2 => `${s2.label} (${A.ymd(s2.started_at)})`), '출석 횟수', '구분', '비고'];
+      // 이수 기준·지각 (켠 행사만): 출석률 = 출석한 회차 ÷ 전체 회차
+      const P = cfg.pass || {}, passOn = !!P.on, minPct = +P.min_pct || 80, late = /^\d{1,2}:\d{2}$/.test(P.late || '') ? P.late.padStart(5, '0') : '';
+      const isLate = a => !!(late && a && a.at && A.hhmm(a.at) > late);
+      const head = ['연번', '부서명', '직위(직급)', '성명', ...ss.map(s2 => `${s2.label} (${A.ymd(s2.started_at)})`), '출석 횟수',
+        ...(late ? ['지각 횟수'] : []), ...(passOn ? ['출석률', `이수(${minPct}% 이상)`] : []), '구분', '비고'];
       const rows = [[`${cfg.title} 출석부`], [], head];
-      let k = 0;
+      let k = 0, nPass = 0;
       all.forEach(p => {
-        const notes = new Set();
+        const notes = new Set(); let nLate = 0;
         const marks = ss.map(s2 => { const a = map.get(s2.id + ':' + p.no); if (!a) return '';
           noteOf(a, shared.get(s2.id)).split(', ').filter(Boolean).forEach(n => notes.add(n));
-          return a.at ? '출석 ' + A.hhmm(a.at) + (a.out_at ? ' / 퇴실 ' + A.hhmm(a.out_at) : '') : '퇴실만 ' + A.hhmm(a.out_at); });
+          if (a.via === 'import') notes.add('지난 출석부에서 이어 붙임');
+          if (isLate(a)) nLate++;
+          return a.at ? '출석 ' + A.hhmm(a.at) + (isLate(a) ? '(지각)' : '') + (a.out_at ? ' / 퇴실 ' + A.hhmm(a.out_at) : '') : '퇴실만 ' + A.hhmm(a.out_at); });
         if (p.extra && !marks.some(Boolean)) return;
-        rows.push([p.extra ? (roster.length ? '추가' : '') + (++k) : p.no, p.dept, p.rank, p.name, ...marks, marks.filter(m => m.startsWith('출석')).length, p.extra ? '추가' : '명단', [...notes].join(', ')]);
+        const n = marks.filter(m => m.startsWith('출석')).length, pct = ss.length ? Math.round(n * 100 / ss.length) : 0, ok = pct >= minPct;
+        if (passOn && ok) nPass++;
+        rows.push([p.extra ? (roster.length ? '추가' : '') + (++k) : p.no, p.dept, p.rank, p.name, ...marks, n,
+          ...(late ? [nLate] : []), ...(passOn ? [pct + '%', ok ? '이수' : '미이수'] : []), p.extra ? '추가' : '명단', [...notes].join(', ')]);
       });
       rows.push([], ['', '회차별 출석 인원', '', '', ...ss.map(s2 => d.attendance.filter(a => a.session_id === s2.id && a.at).length + '명')],
         ['', '회차별 퇴실 인원', '', '', ...ss.map(s2 => d.attendance.filter(a => a.session_id === s2.id && a.out_at).length + '명')]);
-      saveBook(rows, [8, 22, 14, 10, ...ss.map(() => 26), 9, 7, 28], '출석부', `${fileSafe(cfg.title)}_출석부_전체.xlsx`);
+      const tot = all.filter(p => !p.extra).length, att = new Set(d.attendance.filter(a => a.at).map(a => a.no)).size;
+      rows.push(['', '출석률(한 번이라도 온 사람)', '', '', tot ? `${att}명 / 명단 ${tot}명 (${Math.round(att * 100 / tot)}%)` : `${att}명`]);
+      if (passOn) rows.push(['', '이수 인원', '', '', `${nPass}명`]);
+      const sheets = [{ name: '출석부', rows, cols: [8, 22, 14, 10, ...ss.map(() => 26), 9, ...(late ? [9] : []), ...(passOn ? [8, 12] : []), 7, 28] }];
+      sheets.push(...surveySheets(d, ss, all));
+      saveBooks(sheets, `${fileSafe(cfg.title)}_출석부_전체.xlsx`);
     } catch (e) { A.toast(e.message, 'bad'); }
   }
+  // 만족도 조사 결과: 요약(문항별 평균·고른 수) + 응답 하나하나
+  function surveySheets(d, ss, all) {
+    const rs = d.responses || [], qs = (cfg.survey && cfg.survey.questions) || [];
+    if (!rs.length || !qs.length) return [];
+    const sum = [[`${cfg.title} 만족도 조사 결과`], [`응답 ${rs.length}건${cfg.survey.anon ? ' · 익명' : ''}`], []];
+    qs.forEach((q, i) => {
+      const vals = rs.map(r => r.answers[q.id]).filter(v => v != null && v !== '' && !(Array.isArray(v) && !v.length));
+      sum.push([`${i + 1}. ${q.q}`, `응답 ${vals.length}`]);
+      if (q.type === 'star') {
+        const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+        sum.push(['', '평균', vals.length ? avg.toFixed(2) + ' / 5' : '-']);
+        [5, 4, 3, 2, 1].forEach(n => sum.push(['', '★'.repeat(n), vals.filter(v => v === n).length + '명']));
+      } else if (q.type === 'one' || q.type === 'multi') {
+        (q.options || []).forEach(o => { const c = vals.filter(v => Array.isArray(v) ? v.includes(o) : v === o).length; sum.push(['', o, c + '명', vals.length ? Math.round(c * 100 / vals.length) + '%' : '']); });
+      } else vals.forEach(v => sum.push(['', String(v)]));
+      sum.push([]);
+    });
+    const named = rs.some(r => r.no != null), byNo = new Map(all.map(p => [p.no, p])), lab = new Map(ss.map(s2 => [s2.id, s2.label]));
+    const raw = [['회차', ...(named ? ['부서명', '성명'] : []), ...qs.map((q, i) => `${i + 1}. ${q.q}`)]];
+    rs.forEach(r => { const p = byNo.get(r.no) || {}; raw.push([lab.get(r.session_id) || '', ...(named ? [p.dept || '', p.name || ''] : []), ...qs.map(q => { const v = r.answers[q.id]; return Array.isArray(v) ? v.join(', ') : v ?? ''; })]); });
+    return [{ name: '만족도 요약', rows: sum, cols: [40, 18, 10, 8] }, { name: '만족도 응답', rows: raw, cols: [10, ...(named ? [18, 10] : []), ...qs.map(() => 24)] }];
+  }
+  function saveBooks(sheets, file) {
+    const wb = XLSX.utils.book_new();
+    sheets.forEach(sh => { const ws = XLSX.utils.aoa_to_sheet(sh.rows); ws['!cols'] = sh.cols.map(w => ({ wch: w })); XLSX.utils.book_append_sheet(wb, ws, sh.name.slice(0, 31)); });
+    XLSX.writeFile(wb, file);
+  }
+
   // 담당자가 대신 처리: 명단에 없는 사람 넣기 / 미참석자 한 사람씩 출석(퇴실) 처리
   async function addPerson() {
     const name = await A.dialog({ title: '직접 출석 처리', message: '명단에 없는 사람이나 휴대폰이 없는 사람을 담당자가 대신 출석 처리합니다.\n(명단에 있는 사람은 [미참석자]에서 처리할 수 있어요)\n\n이름을 써 주세요.', input: '', ok: '다음' });
@@ -972,6 +1061,7 @@
     more.onclick = e => { e.stopPropagation(); menu.hidden = !menu.hidden; more.setAttribute('aria-expanded', String(!menu.hidden)); };
     menu.addEventListener('click', () => setTimeout(closeMenu, 0)); addEventListener('click', e => { if (!e.target.closest('#adminBar')) closeMenu(); });
     $('aPhone').onclick = () => A.phoneOpen(eventId, token);
+    $('aSurvey').onclick = toggleSurvey; $('aLottery').onclick = lottery;
     // 휴대폰으로 열었으면: 큰 화면 대신 미참석자 목록부터 보여 준다
     if (new URLSearchParams(location.search).get('phone') || matchMedia('(max-width: 760px)').matches) {
       document.body.classList.add('phone-admin'); toggleAbsent(true);

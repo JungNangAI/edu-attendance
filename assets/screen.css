@@ -152,3 +152,22 @@ body.phone-admin .admin-bar.idle{opacity:1;transform:none;pointer-events:auto}
 body.phone-admin .admin-bar button{font-size:13px;padding:8px 10px}
 body.phone-admin .admin-tip,body.phone-admin #snd{display:none!important}
 body.phone-admin .ab-list a{font-size:17px;font-weight:700;padding:4px 8px}
+
+/* 경품 추첨 */
+.lot{position:fixed;inset:0;z-index:2500;display:grid;place-items:center;background:rgba(10,14,30,.78);backdrop-filter:blur(6px)}
+.lot[hidden]{display:none}
+.lot-box{position:relative;width:min(760px,92vw);background:#fffaf0;color:#222b45;border-radius:28px;padding:34px 36px 28px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.lot-cast{position:absolute;right:-40px;top:-70px;width:min(230px,30vw);filter:drop-shadow(0 8px 14px rgba(0,0,0,.25))}
+.lot-box h2{font-size:clamp(24px,3vw,38px);margin:0}
+.lot-pool{color:#4a5068;margin:6px 0 18px;font-size:clamp(14px,1.4vw,18px)}
+.lot-reel{position:relative;background:#222b45;color:#fff;border-radius:20px;padding:26px 10px;min-height:150px;display:grid;place-items:center;align-content:center;gap:4px}
+.lot-dept{font-size:clamp(16px,1.8vw,24px);color:#ffd43b}
+.lot-name{font-size:clamp(46px,7vw,92px);line-height:1.05;letter-spacing:2px}
+.lot-stamp{position:absolute;right:28px;bottom:14px;width:120px;height:120px;border:7px solid #e23b3b;border-radius:50%;color:#e23b3b;font-weight:900;font-size:34px;display:grid;place-items:center;transform:rotate(-14deg) scale(2.6);opacity:0;background:rgba(255,255,255,.88)}
+.lot-stamp.hit{animation:lotStamp .45s cubic-bezier(.2,1.5,.4,1) forwards}
+@keyframes lotStamp{to{transform:rotate(-14deg) scale(1);opacity:1}}
+.lot-btns{display:flex;gap:10px;justify-content:center;margin-top:20px}
+.lot-btns button{font:inherit;font-weight:800;font-size:20px;border:0;border-radius:14px;padding:14px 28px;cursor:pointer}
+.lot-go{background:#ffd43b;color:#222b45;box-shadow:0 5px 0 #c9a21a}.lot-go:active{transform:translateY(4px);box-shadow:0 1px 0 #c9a21a}.lot-go:disabled{opacity:.6}
+.lot-x{background:#e6e8ef;color:#222b45}
+.lot-win{margin:14px 0 0;color:#4a5068;font-size:15px}

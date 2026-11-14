@@ -54,6 +54,7 @@
     if (/^screen\.(bg|accent)/.test(k) || !k) checkContrast();
     if (k.startsWith('attend')) syncAttendUi();
     if (k.startsWith('cert') || !k) { syncCertUi(); certPreview(); }
+    if (k === 'pass.on' || k === 'survey.on' || !k) syncOptUi();
     if (!k.startsWith('cert.template') ) sendPreview();
     if (k === 'cert.enabled' || k === 'cert.button') sendPreview();
     markSteps();
@@ -80,7 +81,9 @@
       if (!String(state.config.cert.title || '').trim()) p.push([4, '증서 제목을 넣어 주세요']);
       if (!String(state.config.cert.issuer || '').trim()) p.push([4, '증서 명의를 넣어 주세요']);
       if (state.config.cert.date_mode === 'fixed' && !state.config.cert.date) p.push([4, '증서 날짜를 골라 주세요']);
+      if (state.config.cert.only_attendees === 'pass' && !state.config.pass.on) p.push([4, "'이수 기준을 채운 사람만'을 고르면 이수 기준을 켜 주세요"]);
     }
+    const sp = surveyProblem(); if (sp) p.push([4, sp]);
     return p;
   }
   function markSteps() {
@@ -99,8 +102,11 @@
       ['행사', c.title || '(없음)'], ['명단', state.roster.length ? state.roster.length + '명' + (walkin() ? ' + 명단에 없는 사람도 받기' : '') : (walkin() ? '명단 없이 오는 대로 받기' : '0명')],
       ['출석 방식', [c.attend.one_phone ? '한 휴대폰 한 사람' : '휴대폰 제한 없음', c.attend.rotate_qr ? '30초마다 바뀌는 QR' : '', c.screen.checkout === 'on' ? '퇴실 체크' : ''].filter(Boolean).join(' · ')],
       ['테마', (A.THEMES[c.screen.theme] || {}).label],
-      ['증서', c.cert.enabled ? `${c.cert.title} · ${c.cert.only_attendees === 'inout' ? '입실·퇴실 모두 한 사람만' : c.cert.only_attendees ? '출석한 사람만' : '누구나'}` : '쓰지 않음']
+      ['증서', c.cert.enabled ? `${c.cert.title} · ${c.cert.only_attendees === 'pass' ? '이수한 사람만' : c.cert.only_attendees === 'inout' ? '입실·퇴실 모두 한 사람만' : c.cert.only_attendees ? '출석한 사람만' : '누구나'}` : '쓰지 않음']
     ];
+    const extra = [c.pass.on ? `이수 ${c.pass.min_pct === '100' ? '모두 출석' : c.pass.min_pct + '% 이상'}${c.pass.late ? ' · 지각 ' + c.pass.late : ''}` : '', c.survey.on ? `만족도 ${c.survey.questions.length}문항${c.survey.anon ? '(익명)' : ''}` : '', c.lottery ? '경품 추첨' : ''].filter(Boolean);
+    if (extra.length) items.push(['더 쓰는 기능', extra.join(' · ')]);
+    items.push(['기록 보관', keepDays() + '일']);
     if (EDIT && expiresAt) items.push(['자동 삭제 예정', new Date(expiresAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ` (출석·새 회차·저장할 때마다 ${keepDays()}일 뒤로 늦춰져요)`]);
     const html = items.map(([k, v]) => `<li>${k}: <b>${A.esc(v)}</b></li>`).join('') + problems().map(([n, m]) => `<li style="color:var(--bad)">${n}단계: ${A.esc(m)}</li>`).join('');
     $('summary').innerHTML = html; $('summary2').innerHTML = html;
@@ -304,6 +310,61 @@
     state.config.cert.fields.push({ key, label: { dept: '부서명', rank: '직급', name: '성명' }[key] || '과정명' });
     renderFields(); touch('cert.fields');
   };
+  /* ---------- 4. 이수 기준 · 만족도 조사 ---------- */
+  function syncOptUi() {
+    $('passBox').hidden = !state.config.pass.on;
+    const on = !!state.config.survey.on; $('surveyBox').hidden = !on;
+    if (on && !(state.config.survey.questions || []).length) { state.config.survey.questions = A.DEFAULT_SURVEY.map(q => ({ ...q })); }
+    if (on) renderQs();
+  }
+  const QT = { star: '별점 (1~5)', one: '하나 고르기', multi: '여러 개 고르기', text: '짧은 글' };
+  function renderQs() {
+    const qs = state.config.survey.questions;
+    $('qList').innerHTML = qs.map((q, i) => `<div class="q-item" data-i="${i}">
+      <div class="q-row"><b>${i + 1}</b><input type="text" data-q="q" value="${A.esc(q.q || '')}" maxlength="80" placeholder="질문을 써 주세요" aria-label="${i + 1}번 질문">
+        <select data-q="type" aria-label="답 종류">${Object.entries(QT).map(([k, v]) => `<option value="${k}" ${q.type === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      ${q.type === 'one' || q.type === 'multi' ? `<textarea data-q="options" rows="2" placeholder="보기를 한 줄에 하나씩 (최대 8개)" aria-label="보기">${A.esc((q.options || []).join('\n'))}</textarea>` : ''}
+      <div class="q-row"><label class="check"><input type="checkbox" data-q="req" ${q.req ? 'checked' : ''}> 꼭 답하기</label>
+        <button type="button" class="btn ghost q-del" data-qdel="${i}" ${qs.length <= 1 ? 'disabled' : ''}>빼기</button></div></div>`).join('');
+  }
+  const newQid = () => 'q' + Date.now().toString(36).slice(-5) + Math.floor(Math.random() * 99);
+  $('qList').addEventListener('input', e => {
+    const box = e.target.closest('.q-item'); if (!box) return; e.stopPropagation();
+    const q = state.config.survey.questions[+box.dataset.i], k = e.target.dataset.q;
+    if (k === 'q') q.q = e.target.value.slice(0, 80);
+    if (k === 'options') q.options = [...new Set(e.target.value.split(/\r?\n/).map(x => x.trim().slice(0, 40)).filter(Boolean))].slice(0, 8);
+    if (k === 'req') q.req = e.target.checked;
+    touch('survey.questions');
+  });
+  $('qList').addEventListener('change', e => {
+    const box = e.target.closest('.q-item'); if (!box) return; e.stopPropagation();
+    const q = state.config.survey.questions[+box.dataset.i];
+    if (e.target.dataset.q === 'type') { q.type = e.target.value; if ((q.type === 'one' || q.type === 'multi') && !(q.options || []).length) q.options = ['매우 그렇다', '그렇다', '보통', '아니다']; renderQs(); }
+    if (e.target.dataset.q === 'req') q.req = e.target.checked;
+    touch('survey.questions');
+  });
+  $('qList').addEventListener('click', e => { const b = e.target.closest('[data-qdel]'); if (!b) return; state.config.survey.questions.splice(+b.dataset.qdel, 1); renderQs(); touch('survey.questions'); });
+  $('qAdd').onclick = () => { const qs = state.config.survey.questions; if (qs.length >= 10) { A.toast('문항은 10개까지예요', 'bad'); return; } qs.push({ id: newQid(), type: 'star', q: '', req: false }); renderQs(); touch('survey.questions'); $('qList').lastElementChild.querySelector('input').focus(); };
+  $('qReset').onclick = async () => { if (await A.dialog({ title: '기본 문항으로', message: '지금 문항을 지우고 기본 문항 5개로 바꿀까요?', ok: '바꾸기' })) { state.config.survey.questions = A.DEFAULT_SURVEY.map(q => ({ ...q })); renderQs(); touch('survey.questions'); } };
+  // 지난 행사 문항 불러오기: 이 브라우저에서 만든 행사 목록에서
+  function fillQFrom() { $('qFrom').innerHTML = '<option value="">지난 행사 문항 불러오기…</option>' + A.myEvents().filter(x => x.id !== eventId).map(x => `<option value="${x.id}">${A.esc(x.title || '(이름 없음)')}</option>`).join(''); }
+  $('qFrom').addEventListener('change', async e => {
+    e.stopPropagation(); const id = e.target.value; if (!id) return;
+    try {
+      const ev = await A.rpc('get_event', { p_id: id }); const qs = ev && ev.config && ev.config.survey && ev.config.survey.questions;
+      if (!qs || !qs.length) { A.toast('그 행사에는 만족도 문항이 없어요', 'bad'); }
+      else { state.config.survey.questions = qs.slice(0, 10).map(q => ({ ...q })); renderQs(); touch('survey.questions'); A.toast(`문항 ${qs.length}개를 불러왔어요`, 'ok'); }
+    } catch (er) { A.toast('불러오지 못했어요 (지워진 행사일 수 있어요)', 'bad'); }
+    e.target.value = '';
+  });
+  function surveyProblem() {
+    const sv = state.config.survey; if (!sv.on) return null;
+    if (!sv.questions.length) return '만족도 문항이 없어요';
+    if (sv.questions.some(q => !String(q.q || '').trim())) return '비어 있는 만족도 질문이 있어요';
+    if (sv.questions.some(q => (q.type === 'one' || q.type === 'multi') && (q.options || []).length < 2)) return '고르기 문항은 보기가 2개 이상 있어야 해요';
+    return null;
+  }
+
   function syncCertUi() {
     const on = !!state.config.cert.enabled;
     $('certBox').style.opacity = on ? 1 : .45; $('certBox').inert = !on;
@@ -470,7 +531,7 @@
 
   /* ---------- 시작 ---------- */
   function initUi() {
-    renderThemes(); renderFields(); bindAll(); renderThumbs(); syncCertUi(); checkContrast(); renderRoster(); markSteps();
+    renderThemes(); renderFields(); bindAll(); renderThumbs(); syncCertUi(); syncOptUi(); fillQFrom(); checkContrast(); renderRoster(); markSteps();
     showStep(1); sendPreview(); certPreview();
   }
   (async function start() {

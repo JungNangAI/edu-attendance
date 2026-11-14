@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;600;700&family=Nanum+Myeongjo:wght@400;700;800&display=swap">
-<link rel="stylesheet" href="assets/common.css?v=20261114">
+<link rel="stylesheet" href="assets/common.css?v=20261115">
 <style>
 .head{background:var(--accent);color:var(--on-accent);padding:24px 16px 22px;position:relative}
 .head .wrap{display:flex;align-items:center;gap:16px}
@@ -66,8 +66,8 @@
   <div class="card full" id="full" hidden></div>
 </div></div>
 <script src="config.js"></script>
-<script src="assets/common.js?v=20261114"></script>
-<script src="assets/cert.js?v=20261114"></script>
+<script src="assets/common.js?v=20261115"></script>
+<script src="assets/cert.js?v=20261115"></script>
 <script>
 (function(){
   'use strict';
@@ -91,7 +91,7 @@
     const no = +$('pick').value; picked = null;
     if (!no) return;
     const ok = await A.rpc('check_attended', { p_id: eventId, p_no: no }).catch(() => false);
-    if (!ok) { $('err').textContent = cert.only_attendees === 'inout' ? '입실과 퇴실 기록이 모두 있어야 받을 수 있어요. 수업이 끝날 때 QR로 퇴실해 주세요.' : '이 이름은 출석 기록이 없어요. 출석을 먼저 해 주세요.'; return; }
+    if (!ok) { $('err').textContent = cert.only_attendees === 'pass' ? '이수 기준(전체 회차 중 출석 비율)을 채운 사람만 받을 수 있어요. 담당자에게 말씀해 주세요.' : cert.only_attendees === 'inout' ? '입실과 퇴실 기록이 모두 있어야 받을 수 있어요. 수업이 끝날 때 QR로 퇴실해 주세요.' : '이 이름은 출석 기록이 없어요. 출석을 먼저 해 주세요.'; return; }
     picked = no; fillFrom(roster.find(x => x.no === no));
   }
 

@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&family=Nanum+Myeongjo:wght@400;700;800&display=swap">
-<link rel="stylesheet" href="assets/common.css?v=20261114">
-<link rel="stylesheet" href="assets/admin.css?v=20261114">
+<link rel="stylesheet" href="assets/common.css?v=20261115">
+<link rel="stylesheet" href="assets/admin.css?v=20261115">
 </head>
 <body>
 <header class="topbar"><div class="wrap">
@@ -23,7 +23,7 @@
   <button type="button" data-step="1"><b>1</b><span>기본 정보</span></button>
   <button type="button" data-step="2"><b>2</b><span>명단</span></button>
   <button type="button" data-step="3"><b>3</b><span>출석 화면</span></button>
-  <button type="button" data-step="4"><b>4</b><span>위촉장·수료증</span></button>
+  <button type="button" data-step="4"><b>4</b><span>수료·만족도</span></button>
   <button type="button" data-step="5" id="stepFinish"><b>✓</b><span>만들기</span></button>
 </nav>
 
@@ -140,7 +140,7 @@
 
     <!-- 4. 위촉장·수료증 -->
     <section class="step card" data-step="4" hidden>
-      <h2>4. 위촉장·수료증</h2>
+      <h2>4. 위촉장·수료증 · 이수 · 만족도</h2>
       <label class="check big"><input type="checkbox" data-k="cert.enabled" id="certOn"> 출석한 뒤 위촉장(수료증)을 받을 수 있게 하기</label>
       <div id="certBox">
         <div class="two">
@@ -159,7 +159,7 @@
         <div id="fieldList"></div>
         <button type="button" class="btn ghost" id="addField">칸 더하기</button>
         <h3>받을 수 있는 사람</h3>
-        <div class="seg"><label><input type="radio" name="oa" data-k="cert.only_attendees" value="false"> 누구나</label><label><input type="radio" name="oa" data-k="cert.only_attendees" value="true"> 출석한 사람만</label><label><input type="radio" name="oa" data-k="cert.only_attendees" value="inout"> 입실·퇴실 모두 한 사람만 (퇴실 체크를 쓸 때)</label></div>
+        <div class="seg"><label><input type="radio" name="oa" data-k="cert.only_attendees" value="false"> 누구나</label><label><input type="radio" name="oa" data-k="cert.only_attendees" value="true"> 출석한 사람만</label><label><input type="radio" name="oa" data-k="cert.only_attendees" value="inout"> 입실·퇴실 모두 한 사람만 (퇴실 체크를 쓸 때)</label><label><input type="radio" name="oa" data-k="cert.only_attendees" value="pass"> 이수 기준을 채운 사람만 (아래 이수 기준)</label></div>
         <div class="two">
           <div class="field"><label class="f">출석 화면 버튼 글자</label><input type="text" data-k="cert.button" maxlength="16"></div>
           <div class="field"><label class="f">테두리</label><select data-k="cert.border"><option value="gold">금색 이중선</option><option value="line">한 줄</option><option value="none">없음</option></select></div>
@@ -186,6 +186,28 @@
             <label>명의·직인 위치<input type="range" min="-400" max="400" step="5" data-k="cert.template.dy.sign"></label>
           </div>
         </div>
+      </div>
+      <div class="opt-sec">
+        <label class="check big"><input type="checkbox" data-k="pass.on" id="passOn"> 이수 기준 쓰기 <span class="hint-inline">여러 회차 교육</span></label>
+        <div id="passBox" class="opt-box">
+          <div class="two">
+            <div class="field"><label class="f" for="passPct">이수 기준 (전체 회차 중 출석)</label><select id="passPct" data-k="pass.min_pct"><option value="50">50% 이상</option><option value="60">60% 이상</option><option value="70">70% 이상</option><option value="80">80% 이상</option><option value="90">90% 이상</option><option value="100">모두 출석</option></select></div>
+            <div class="field"><label class="f" for="passLate">지각 기준 시각 (선택)</label><input type="time" id="passLate" data-k="pass.late"></div>
+          </div>
+          <p class="hint">엑셀 전체 출석부에 <b>이수/미이수</b>가 나와요. 지각 기준 시각을 넣으면 그 뒤에 들어온 출석에 '지각'이 붙어요.</p>
+        </div>
+      </div>
+      <div class="opt-sec">
+        <label class="check big"><input type="checkbox" data-k="survey.on" id="surveyOn"> 만족도 조사 받기</label>
+        <div id="surveyBox" class="opt-box">
+          <label class="check"><input type="checkbox" data-k="survey.anon"> 익명으로 받기 (엑셀에 이름이 붙지 않아요)</label>
+          <div id="qList" class="q-list"></div>
+          <div class="row-btns"><button type="button" class="btn ghost" id="qAdd">+ 문항 추가</button><button type="button" class="btn ghost" id="qReset">기본 문항으로</button><select id="qFrom" aria-label="지난 행사 문항 불러오기"><option value="">지난 행사 문항 불러오기…</option></select></div>
+          <p class="hint">퇴실 체크를 쓰면 퇴실하면서 바로 답하고, 안 쓰면 강의실 화면의 <b>만족도 받기 시작</b>을 누르면 같은 QR이 설문으로 바뀌어요. 이번 회차에 출석한 휴대폰만 한 번 낼 수 있어요.</p>
+        </div>
+      </div>
+      <div class="opt-sec">
+        <label class="check big"><input type="checkbox" data-k="lottery"> 경품 추첨 쓰기 <span class="hint-inline">강의실 화면 [더보기]에 추첨 버튼</span></label>
       </div>
     </section>
 
@@ -225,10 +247,10 @@
 </div>
 
 <script src="config.js"></script>
-<script src="assets/qrcode.js?v=20261114"></script>
-<script src="assets/xlsx.full.min.js?v=20261114"></script>
-<script src="assets/common.js?v=20261114"></script>
-<script src="assets/cert.js?v=20261114"></script>
-<script src="assets/admin.js?v=20261114"></script>
+<script src="assets/qrcode.js?v=20261115"></script>
+<script src="assets/xlsx.full.min.js?v=20261115"></script>
+<script src="assets/common.js?v=20261115"></script>
+<script src="assets/cert.js?v=20261115"></script>
+<script src="assets/admin.js?v=20261115"></script>
 </body>
 </html>

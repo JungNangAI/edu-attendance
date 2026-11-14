@@ -6,6 +6,10 @@
   /* ---------- 기본 설정 ---------- */
   const DEFAULT_CONFIG = {
     title: '', subtitle: '', org: '', first_session: '1회차', block_duplicate: true, keep_days: '10',
+    // 이수 기준(전체 회차 중 출석 비율)·지각 기준 시각, 만족도 조사, 경품 추첨 — 모두 기본은 꺼짐
+    pass: { on: false, min_pct: '80', late: '' },
+    survey: { on: false, anon: true, questions: [] },
+    lottery: false,
     // 출석 방식: walkin 명단에 없는 사람도 받기 / one_phone 한 휴대폰 한 사람 / rotate_qr 30초마다 바뀌는 QR / depts 직접 쓸 때 보여 줄 부서 목록
     attend: { walkin: false, one_phone: false, rotate_qr: false, depts: [] },
     screen: {
@@ -55,6 +59,13 @@
     return out;
   }
   const withDefaults = c => merge(DEFAULT_CONFIG, c || {});
+  const DEFAULT_SURVEY = [
+    { id: 'q1', type: 'star', q: '교육에 전반적으로 만족하시나요?', req: true },
+    { id: 'q2', type: 'star', q: '강사(진행)에 만족하시나요?', req: true },
+    { id: 'q3', type: 'star', q: '업무에 도움이 될 것 같나요?', req: true },
+    { id: 'q4', type: 'text', q: '좋았던 점', req: false },
+    { id: 'q5', type: 'text', q: '바라는 점', req: false }
+  ];
 
   /* ---------- 저장소 호출 ---------- */
   class RpcError extends Error {}
@@ -264,7 +275,7 @@
   }
 
   window.App = {
-    CFG, ready: !!(CFG.supabaseUrl && CFG.supabaseKey), DEFAULT_CONFIG, THEMES, PALETTES, withDefaults, merge,
+    CFG, ready: !!(CFG.supabaseUrl && CFG.supabaseKey), DEFAULT_CONFIG, DEFAULT_SURVEY, THEMES, PALETTES, withDefaults, merge,
     rpc, RpcError, noFn, query, hashParam, links, siteBase, takeToken, deviceId, myEvents, rememberEvent, forgetEvent,
     esc, josa, hhmm, ymd, shortDate, applyColors, contrast, mix, lum,
     loadImage, shrinkImage, fetchAsDataUrl, loadAssets, qrCanvas, qrSvg, download, toast, dialog, phoneOpen, confetti
