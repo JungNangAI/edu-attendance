@@ -19,9 +19,9 @@
 .hero .btn{background:var(--ink);color:#fff;font-size:17px;padding:15px 26px;border-radius:14px;box-shadow:0 6px 0 #0f1424}
 .hero .btn:hover{transform:translateY(-1px)}
 .hero .btn:active{transform:translateY(4px);box-shadow:0 2px 0 #0f1424}
-.hero .cast{position:relative;width:min(34vw,330px);margin-bottom:-38px}
+.hero .cast{position:relative;width:min(40vw,400px);margin-bottom:-30px}
 .hero .cast .mascot{width:100%;animation:bob 4.5s ease-in-out infinite}
-.hero .cast .bubble{position:absolute;z-index:2;left:-150px;top:-4px;background:#fff;border:2.5px solid var(--ink);border-radius:18px;padding:8px 14px;font-weight:700;font-size:15px;white-space:nowrap;animation:popIn .6s .4s both}
+.hero .cast .bubble{position:absolute;z-index:2;left:-120px;top:10px;background:#fff;border:2.5px solid var(--ink);border-radius:18px;padding:8px 14px;font-weight:700;font-size:15px;white-space:nowrap;animation:popIn .6s .4s both}
 .hero .cast .bubble::after{content:"";position:absolute;right:-10px;top:12px;width:16px;height:16px;background:#fff;border-right:2.5px solid var(--ink);border-top:2.5px solid var(--ink);transform:rotate(45deg)}
 .hero .dots{position:absolute;left:52%;top:24px;display:grid;grid-template-columns:repeat(5,30px);gap:7px;opacity:.85}
 .hero .dots i{width:30px;height:22px;border-radius:6px;background:rgba(34,43,69,.10);animation:lit 6s infinite}
@@ -48,7 +48,7 @@
 .foot{text-align:center;color:var(--muted);font-size:13px;padding:8px 16px 28px}
 .foot img{height:20px;width:auto;display:block;margin:0 auto 8px;opacity:.9}
 @media (max-width:820px){.flow{grid-template-columns:1fr}.hero .dots{display:none}}
-@media (max-width:640px){.hero .wrap{grid-template-columns:1fr}.hero .cast{position:absolute;right:-8px;bottom:-30px;width:150px;margin:0}.hero .cast .bubble{display:none}.hero .slogan{height:26px}.hero p{padding-right:110px}}
+@media (max-width:640px){.hero .wrap{grid-template-columns:1fr}.hero .cast{position:absolute;right:-8px;bottom:-26px;width:180px;margin:0}.hero .cast .bubble{display:none}.hero .slogan{height:26px}.hero p{padding-right:110px}}
 </style>
 </head>
 <body>
@@ -60,7 +60,7 @@
     <p>명단 엑셀만 올리면 강의실 화면에 QR이 뜨고, 참석자가 찍는 대로 이름이 하나씩 켜져요. 명단 없이 오는 대로 받을 수도 있어요. 출석부 엑셀과 위촉장·수료증까지 한 번에.</p>
     <a class="btn" href="admin.html">새 행사 만들기</a>
   </div>
-  <div class="cast" aria-hidden="true"><span class="bubble">출석은 제가 받을게요!</span><img class="mascot" src="assets/defaults/geuljuim_welcome.png" alt=""></div>
+  <div class="cast" aria-hidden="true"><span class="bubble">출석은 제가 받을게요!</span><img class="mascot" src="assets/defaults/geuljuim_attend.png?v=20261114b" alt=""></div>
 </div></section>
 <div class="tri" aria-hidden="true"></div>
 <div class="page"><div class="wrap">
