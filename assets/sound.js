@@ -359,7 +359,7 @@
     pop: ['pop_beautiful_korea', 'pop_colors_of_life', 'pop_game', 'pop_morning_kiss', 'pop_dreams'],
     calm: ['calm_how_are_you', 'calm_consolation', 'calm_traumerei', 'calm_bach_largo', 'calm_liebestraum', 'calm_piano_man'],
     epic: ['epic_city_key', 'epic_chuncheon_autumn', 'epic_bed', 'epic_experience', 'epic_be_free', 'pop_dreams'],   // Dreams는 신나게·웅장하게 둘 다
-    dream: ['dream_green_apple', 'epic_experience', 'epic_bed', 'epic_city_key']   // Experience·Bed·City Key는 웅장하게·몽환적으로 둘 다
+    dream: ['dream_green_apple', 'dream_moon_dance', 'epic_experience', 'epic_bed', 'epic_city_key']   // Experience·Bed·City Key는 웅장하게·몽환적으로 둘 다
   };
   const NEXT = { pop: ['pop'], calm: ['calm', 'dream'], dream: ['dream', 'calm'], epic: ['epic', 'dream'] };   // 분위기가 갑자기 바뀌지 않게 비슷한 곡끼리만
   const fileStyle = th => { const st = styleOf(th); return st === 'waltz' ? 'calm' : st; };
