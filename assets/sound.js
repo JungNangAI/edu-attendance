@@ -357,7 +357,7 @@
      그 분위기 곡이 다 끝나면 비슷한 분위기 곡으로 넘어간다. 음원을 못 불러오면 합성 음악으로 대신한다 */
   const MUSIC = {
     pop: ['pop_beautiful_korea', 'pop_colors_of_life', 'pop_game', 'pop_morning_kiss'],
-    calm: ['calm_how_are_you'],
+    calm: ['calm_how_are_you', 'calm_consolation', 'calm_traumerei', 'calm_bach_largo', 'calm_liebestraum'],
     epic: ['epic_city_key', 'epic_chuncheon_autumn'],
     dream: ['dream_green_apple']
   };
