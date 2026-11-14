@@ -62,6 +62,9 @@ alter table attendance add column if not exists out_device text;   -- 퇴실한 
 alter table attendance add column if not exists via        text;   -- 'admin' = 담당자가 대신 입실 처리
 alter table attendance add column if not exists out_via    text;   -- 'admin' = 담당자가 대신 퇴실 처리
 alter table events     add column if not exists qr_secret  text;   -- 바뀌는 QR을 만드는 비밀 값
+-- 보관 기간 고르기 (나중에 추가된 칸)
+alter table events     add column if not exists keep_days  int not null default 10;        -- 행사 기록 보관: 마지막으로 쓴 날부터 10·30·60·90일
+alter table events     add column if not exists last_used  timestamptz not null default now(); -- 마지막으로 쓴 때(연락처는 여기서 10일 뒤 먼저 지움)
 create index if not exists attendance_device on attendance(session_id, device);
 
 create table if not exists assets (              -- 올린 이미지(로고·배경·직인 등). 브라우저에서 줄여 data URL로 저장
@@ -98,9 +101,21 @@ alter table events alter column expires_at set default now() + interval '10 days
 update events set expires_at = least(expires_at, greatest(updated_at, created_at) + _keep());
 
 -- ---------- 내부 도우미 ----------
+-- 행사마다 고른 보관 기간(10·30·60·90일). 그 밖의 값은 10일
+create or replace function _keep_days(c jsonb) returns int
+language sql immutable as $$
+  select case when coalesce(c->>'keep_days', '') in ('30', '60', '90') then (c->>'keep_days')::int else 10 end;
+$$;
 create or replace function _purge() returns void
 language sql security definer set search_path = public, extensions as $$
   delete from events where expires_at < now();
+  -- 연락처는 보관 기간과 상관없이 마지막으로 쓴 날부터 10일 뒤 먼저 지운다
+  update events set phones = '{}'::jsonb where phones <> '{}'::jsonb and last_used < now() - interval '10 days';
+$$;
+-- 행사를 쓸 때마다(출석·새 회차·퇴실 받기 등) 삭제일을 뒤로 민다. '보관 연장'으로 늘린 날짜는 줄이지 않는다
+create or replace function _touch(p_id uuid) returns void
+language sql security definer set search_path = public, extensions as $$
+  update events set last_used = now(), expires_at = greatest(expires_at, now() + make_interval(days => keep_days)) where id = p_id;
 $$;
 
 create or replace function _admin(p_id uuid, p_token text) returns events
@@ -229,7 +244,7 @@ language sql security definer set search_path = public, extensions as $$
     'session', (select jsonb_build_object('id', s.id, 'label', s.label, 'started_at', s.started_at, 'mode', s.mode)
                 from sessions s where s.id = e.current_session),
     'assets', coalesce((select jsonb_agg(a.key) from assets a where a.event_id = e.id), '[]'::jsonb),
-    'expires_at', e.expires_at);
+    'expires_at', e.expires_at, 'keep_days', e.keep_days);
 $$;
 
 -- ---------- 공개 함수 (누구나) ----------
@@ -246,8 +261,9 @@ begin
   if jsonb_array_length(r) = 0 and coalesce(p_config->'attend'->>'walkin', '') <> 'true' then raise exception '명단이 비어 있습니다'; end if;
   if jsonb_array_length(r) > 2000 then raise exception '명단은 2000명까지입니다'; end if;
   tok := encode(gen_random_bytes(18), 'hex');
-  insert into events(admin_hash, config, roster, phones, expires_at)
-    values (encode(digest(tok, 'sha256'), 'hex'), p_config, r, _phones(p_roster), now() + _keep()) returning id into new_id;
+  insert into events(admin_hash, config, roster, phones, keep_days, expires_at)
+    values (encode(digest(tok, 'sha256'), 'hex'), p_config, r, _phones(p_roster), _keep_days(p_config),
+            now() + make_interval(days => _keep_days(p_config))) returning id into new_id;
   insert into sessions(event_id, label)
     values (new_id, coalesce(nullif(trim(p_config->>'first_session'), ''), '1회차')) returning id into sid;
   update events set current_session = sid where id = new_id;
@@ -351,7 +367,7 @@ begin
 
   select * into prev from attendance where session_id = s.id and person_no = n;
   dupblock := coalesce((e.config->>'block_duplicate')::boolean, true);
-  update events set expires_at = now() + _keep() where id = e.id;   -- 출석한 날도 쓴 날로 친다
+  perform _touch(e.id);   -- 출석한 날도 쓴 날로 친다
   if s.mode = 'out' then
     -- 퇴실 받는 중
     if onep and prev.at is not null and prev.device is not null and prev.device <> d then
@@ -457,8 +473,9 @@ begin
   if jsonb_array_length(r) = 0 and coalesce(coalesce(p_config, e.config)->'attend'->>'walkin', '') <> 'true' then raise exception '명단이 비어 있습니다'; end if;
   -- 새 명단에 전화번호가 하나도 없으면 예전 번호를 그대로 둔다
   ph := case when p_roster is null or _phones(p_roster) = '{}'::jsonb then e.phones else _phones(p_roster) end;
-  update events set config = coalesce(p_config, config), roster = r, phones = ph, updated_at = now(),
-         expires_at = now() + _keep()
+  update events set config = coalesce(p_config, config), roster = r, phones = ph, updated_at = now(), last_used = now(),
+         keep_days = _keep_days(coalesce(p_config, config)),
+         expires_at = now() + make_interval(days => _keep_days(coalesce(p_config, config)))
    where id = p_id returning * into e;
   return _event_payload(e);
 end $$;
@@ -489,8 +506,8 @@ begin
   select count(*) + 1 into n from sessions where event_id = p_id;
   insert into sessions(event_id, label) values (p_id, coalesce(nullif(trim(p_label), ''), n || '회차'))
     returning id into sid;
-  update events set current_session = sid, updated_at = now(),
-         expires_at = now() + _keep() where id = p_id;
+  update events set current_session = sid, updated_at = now() where id = p_id;
+  perform _touch(p_id);
   return get_board(p_id);
 end $$;
 
@@ -541,7 +558,7 @@ begin
   perform _admin(p_id, p_token);
   if p_mode not in ('in', 'out') then raise exception '잘못된 값'; end if;
   update sessions set mode = p_mode where id = (select current_session from events where id = p_id);
-  update events set expires_at = now() + _keep() where id = p_id;
+  perform _touch(p_id);
   return get_board(p_id);
 end $$;
 
@@ -563,7 +580,7 @@ begin
         via = case when attendance.at is null then 'admin' else attendance.via end,
         at = coalesce(attendance.at, excluded.at);
   end if;
-  update events set expires_at = now() + _keep() where id = p_id;
+  perform _touch(p_id);
   return get_board(p_id);
 end $$;
 
@@ -597,6 +614,67 @@ declare e events;
 begin
   e := _admin(p_id, p_token);
   return e.phones;
+end $$;
+
+-- 강의실 화면이 몇 초마다 묻는 함수. 지난번과 같으면 '같음'만 짧게 돌려줘 전송량을 줄인다
+create or replace function get_board2(p_id uuid, p_ver text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; s sessions; v text; b jsonb;
+begin
+  select * into e from events where id = p_id and expires_at >= now();
+  if e.id is null then return null; end if;
+  select * into s from sessions where id = e.current_session;
+  select md5(concat_ws('|', s.id, s.label, s.mode, e.updated_at, count(a.at), max(a.at), count(a.out_at), max(a.out_at)))
+    into v from attendance a where a.session_id = s.id;
+  if p_ver is not null and p_ver = v then return jsonb_build_object('same', true, 'v', v); end if;
+  b := get_board(p_id);
+  return b || jsonb_build_object('v', v);
+end $$;
+
+-- 보관 연장: 지금 삭제일에서 30일 더 (오늘부터 최대 120일)
+create or replace function extend_keep(p_id uuid, p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events;
+begin
+  perform _admin(p_id, p_token);
+  update events set expires_at = least(greatest(expires_at, now()) + interval '30 days', now() + interval '120 days')
+   where id = p_id returning * into e;
+  return jsonb_build_object('expires_at', e.expires_at);
+end $$;
+
+-- 지난 출석부 엑셀로 이어 붙이기: 받아 둔 '전체 출석부'의 지난 회차를 되살린다
+-- p_sessions = [{label, started_at, rows: [{dept, name, at, out_at}]}]  · 같은 이름·같은 날 회차가 이미 있으면 건너뜀
+create or replace function import_history(p_id uuid, p_token text, p_sessions jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; x jsonb; r jsonb; sid uuid; n int; ns int := 0; nr int := 0; lb text; st timestamptz; nm text; dp text;
+begin
+  e := _admin(p_id, p_token);
+  if jsonb_typeof(p_sessions) <> 'array' or jsonb_array_length(p_sessions) > 100 then raise exception '회차는 100개까지 올릴 수 있어요'; end if;
+  for x in select * from jsonb_array_elements(p_sessions) loop
+    lb := _clean_text(x->>'label', 40); st := (x->>'started_at')::timestamptz;
+    if lb = '' or st is null then continue; end if;
+    if exists (select 1 from sessions where event_id = p_id and label = lb
+                 and (started_at at time zone 'Asia/Seoul')::date = (st at time zone 'Asia/Seoul')::date) then continue; end if;
+    if jsonb_array_length(coalesce(x->'rows', '[]'::jsonb)) > 5000 then raise exception '한 회차는 5000명까지예요'; end if;
+    insert into sessions(event_id, label, started_at) values (p_id, lb, st) returning id into sid;
+    ns := ns + 1;
+    for r in select * from jsonb_array_elements(coalesce(x->'rows', '[]'::jsonb)) loop
+      nm := _clean_text(r->>'name', 40); dp := _clean_text(r->>'dept', 60);
+      if nm = '' or (r->>'at' is null and r->>'out_at' is null) then continue; end if;
+      n := _find_person(e, dp, nm);
+      if n is null then
+        if (select count(*) from extras where event_id = p_id) >= 3000 then continue; end if;
+        n := _add_extra(p_id, dp, nm);
+      end if;
+      insert into attendance(session_id, event_id, person_no, at, out_at, via)
+        values (sid, p_id, n, (r->>'at')::timestamptz, (r->>'out_at')::timestamptz, 'import')
+        on conflict (session_id, person_no) do nothing;
+      nr := nr + 1;
+    end loop;
+  end loop;
+  update events set updated_at = now() where id = p_id;
+  perform _touch(p_id);
+  return jsonb_build_object('sessions', ns, 'rows', nr);
 end $$;
 
 create or replace function delete_event(p_id uuid, p_token text) returns boolean
@@ -636,7 +714,8 @@ begin
     'cancel_attendance(uuid,text,int)', 'export_all(uuid,text)', 'delete_event(uuid,text)',
     'set_mode(uuid,text,text)', 'get_phones(uuid,text)',
     'join_enter(uuid,text,text)', 'submit_attendance2(uuid,int,text,text,text,text)', 'undo_my_attendance(uuid,text)',
-    'admin_mark(uuid,text,int,text)', 'admin_add(uuid,text,text,text)', 'get_qr(uuid,text)']
+    'admin_mark(uuid,text,int,text)', 'admin_add(uuid,text,text,text)', 'get_qr(uuid,text)',
+    'get_board2(uuid,text)', 'extend_keep(uuid,text)', 'import_history(uuid,text,jsonb)']
   loop
     if exists (select 1 from pg_roles where rolname = 'anon') then
       execute format('grant execute on function %s to anon', f);
