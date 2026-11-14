@@ -73,11 +73,12 @@
   <section class="card mine">
     <h2>이 브라우저에서 만든 행사</h2>
     <div id="list"></div>
-    <p class="hint">관리 링크는 이 브라우저에만 저장돼요. 다른 PC에서 쓰려면 행사를 만들 때 받은 관리 링크를 열어 주세요. 행사(명단·출석 기록)는 마지막으로 쓴 날부터 10일 뒤 자동으로 지워져요. 출석부 엑셀은 미리 받아 두세요.</p>
+    <p class="hint">관리 링크는 이 브라우저에만 저장돼요. 다른 PC에서 쓰려면 행사를 만들 때 받은 관리 링크를 열어 주세요. 행사(명단·출석 기록)는 마지막으로 쓴 날부터 고른 보관 기간(기본 10일)이 지나면 자동으로 지워져요. 출석부 엑셀은 미리 받아 두세요. 지워진 뒤에도 받아 둔 엑셀을 명단으로 올리면 이어서 쓸 수 있어요.</p>
   </section>
 </div></div>
 <footer class="foot"><img src="assets/defaults/jungnang_slogan.png" alt="나의 자랑 우리 중랑">중랑AI혁신팀</footer>
 <script src="config.js"></script>
+<script src="assets/qrcode.js?v=20261114"></script>
 <script src="assets/common.js?v=20261114"></script>
 <script>
 (function(){
@@ -88,12 +89,14 @@
   function render(){
     const list = A.myEvents();
     $('list').innerHTML = list.length ? list.map(e => { const L = A.links(e.id, e.token); return `<div class="ev"><div class="t"><b>${A.esc(e.title || '(이름 없음)')}</b><span>${new Date(e.at).toLocaleDateString('ko-KR')} 만듦/저장</span></div>
-      <div class="row"><a class="btn primary" href="${L.screenAdmin}" target="_blank" rel="noopener">강의실 화면</a><a class="btn ghost" href="${L.admin}">설정·링크</a><button type="button" class="btn ghost" data-forget="${e.id}">목록에서 빼기</button></div></div>`; }).join('')
+      <div class="row"><a class="btn primary" href="${L.screenAdmin}" target="_blank" rel="noopener">강의실 화면</a><a class="btn ghost" href="${L.admin}">설정·링크</a><button type="button" class="btn ghost" data-phone="${e.id}">📱 휴대폰</button><button type="button" class="btn ghost quiet" data-forget="${e.id}">숨기기</button></div></div>`; }).join('')
       : '<div class="empty"><img class="mascot" src="assets/defaults/geuljuim_main.png" alt=""><span>아직 만든 행사가 없어요.<br>위의 [새 행사 만들기]로 시작해 보세요.</span></div>';
   }
   $('list').addEventListener('click', async e => {
+    const ph = e.target.closest('[data-phone]');
+    if (ph) { const ev = A.myEvents().find(x => x.id === ph.dataset.phone); if (ev) A.phoneOpen(ev.id, ev.token); return; }
     const id = e.target.dataset.forget; if (!id) return;
-    if (await A.dialog({ title: '목록에서 빼기', message: '이 브라우저 목록에서만 빠지고 행사는 그대로 남아요.\n관리 링크를 따로 적어 두지 않았다면 다시 고칠 수 없게 돼요.', ok: '빼기' })) { A.forgetEvent(id); render(); }
+    if (await A.dialog({ title: '이 PC 목록에서 숨기기', message: '이 브라우저 목록에서만 숨겨요. 행사와 출석 기록은 저장소에 그대로 남아요.\n저장소에서 지우려면 [설정·링크] → 마지막 단계 맨 아래 [행사 삭제]를 쓰세요.\n관리 링크를 따로 적어 두지 않았다면 숨긴 뒤에는 다시 열 수 없어요.', ok: '숨기기' })) { A.forgetEvent(id); render(); }
   });
   render();
 })();

@@ -76,3 +76,8 @@ textarea{min-height:110px;resize:vertical}
 .page{padding:20px 16px 48px}
 
 @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* 휴대폰으로 열기 QR */
+.app-modal .pq{display:grid;place-items:center;margin:6px 0 10px}
+.app-modal .pq svg{width:min(240px,62vw);height:auto;background:#fff;padding:10px;border-radius:12px;border:1px solid #e3e6ee}
+.app-modal .pq-warn{font-size:13px;color:#8a4b08;background:#fff6e6;border-radius:10px;padding:8px 10px}

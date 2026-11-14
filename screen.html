@@ -34,18 +34,23 @@
   <section class="board" id="board" aria-label="출석 보드"></section>
 </main>
 <footer class="s-foot"><span id="foot"></span><span id="conn"></span></footer>
+<div class="rest" id="rest" hidden role="button" tabindex="0"><div><b>잠깐 쉬는 중이에요</b><span>2시간 동안 새 출석이 없어 화면을 멈췄어요.<br>화면을 누르면 다시 켜져요.</span></div></div>
 <div class="welcome" id="welcome" aria-live="polite"><div class="w-in"><span class="w-dept" id="wDept"></span><b id="wName"></b><span id="wMsg"></span></div></div>
 <div class="admin-tip idle" id="adminTip">관리 모드 · 출석한 칸을 누르면 출석을 취소할 수 있어요</div>
 <div class="admin-bar idle" id="adminBar" hidden>
-  <button type="button" id="aRename">회차 이름 바꾸기</button>
-  <button type="button" id="aNew" class="warn">새 회차 시작</button>
   <button type="button" id="aMode" class="mode">퇴실 받기 시작</button>
   <button type="button" id="aAbsent">미참석자</button>
-  <button type="button" id="aAdd">직접 출석 처리</button>
-  <button type="button" id="aXlsNow">엑셀: 이번 회차</button>
-  <button type="button" id="aXlsAll">엑셀: 전체 출석부</button>
-  <button type="button" id="aFull">전체 화면</button>
-  <button type="button" id="aEdit">설정 고치기</button>
+  <button type="button" id="aNew" class="warn">새 회차 시작</button>
+  <button type="button" id="aXlsAll">엑셀 받기</button>
+  <button type="button" id="aMore" aria-expanded="false" aria-controls="moreMenu">더보기 ▾</button>
+  <div class="more-menu" id="moreMenu" hidden>
+    <button type="button" id="aPhone">📱 내 휴대폰으로 열기</button>
+    <button type="button" id="aAdd">직접 출석 처리</button>
+    <button type="button" id="aRename">회차 이름 바꾸기</button>
+    <button type="button" id="aXlsNow">엑셀: 이번 회차만</button>
+    <button type="button" id="aFull">전체 화면</button>
+    <button type="button" id="aEdit">설정 고치기</button>
+  </div>
 </div>
 <aside class="absent" id="absent" hidden aria-label="미참석자 명단">
   <header><b><span id="abTitle">미참석자</span> <span id="abN"></span></b><button type="button" id="abClose" aria-label="닫기">✕</button></header>

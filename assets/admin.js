@@ -93,6 +93,7 @@
     if (step === 1 && !String(state.config.title || '').trim()) { A.toast('행사 이름을 넣어 주세요', 'bad'); $('title').focus(); return; }
     showStep(Math.min(5, step + 1));
   };
+  const keepDays = () => [10, 30, 60, 90].includes(+state.config.keep_days) ? +state.config.keep_days : 10;
   function renderSummary() {
     const c = state.config, items = [
       ['행사', c.title || '(없음)'], ['명단', state.roster.length ? state.roster.length + '명' + (walkin() ? ' + 명단에 없는 사람도 받기' : '') : (walkin() ? '명단 없이 오는 대로 받기' : '0명')],
@@ -100,7 +101,7 @@
       ['테마', (A.THEMES[c.screen.theme] || {}).label],
       ['증서', c.cert.enabled ? `${c.cert.title} · ${c.cert.only_attendees === 'inout' ? '입실·퇴실 모두 한 사람만' : c.cert.only_attendees ? '출석한 사람만' : '누구나'}` : '쓰지 않음']
     ];
-    if (EDIT && expiresAt) items.push(['자동 삭제 예정', new Date(expiresAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ' (출석·새 회차·저장할 때마다 10일씩 늦춰져요)']);
+    if (EDIT && expiresAt) items.push(['자동 삭제 예정', new Date(expiresAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ` (출석·새 회차·저장할 때마다 ${keepDays()}일 뒤로 늦춰져요)`]);
     const html = items.map(([k, v]) => `<li>${k}: <b>${A.esc(v)}</b></li>`).join('') + problems().map(([n, m]) => `<li style="color:var(--bad)">${n}단계: ${A.esc(m)}</li>`).join('');
     $('summary').innerHTML = html; $('summary2').innerHTML = html;
   }
@@ -120,6 +121,7 @@
     else { const w = Math.max(...rows.map(r => r.length)); headers = Array.from({ length: w }, (_, i) => `${i + 1}열`); data = rows; }
     data = data.filter(r => r.some(Boolean));
     sheet = { headers, data };
+    state.history = detectHistory(headers, data);
     const opts = '<option value="-1">(없음)</option>' + headers.map((t, i) => `<option value="${i}">${A.esc(t)}</option>`).join('');
     $$('[data-map]').forEach(s => {
       s.innerHTML = opts;
@@ -134,7 +136,8 @@
     const m = Object.fromEntries($$('[data-map]').map(s => [s.dataset.map, +s.value]));
     const cell = (r, k) => m[k] >= 0 ? String(r[m[k]] || '').trim() : '';
     let skipped = 0;
-    let list = sheet.data.map(r => ({ no: parseInt(cell(r, 'no'), 10), dept: cell(r, 'dept'), rank: cell(r, 'rank'), name: cell(r, 'name'), phone: cell(r, 'phone') }))
+    const gu = state.history ? state.history.guCol : -1;   // 지난 출석부를 올렸으면 '추가'(명단 밖) 사람은 명단에서 뺀다
+    let list = sheet.data.filter(r => gu < 0 || String(r[gu] || '').trim() !== '추가').map(r => ({ no: parseInt(cell(r, 'no'), 10), dept: cell(r, 'dept'), rank: cell(r, 'rank'), name: cell(r, 'name'), phone: cell(r, 'phone') }))
       .filter(p => { if (!p.name) { skipped++; return false; } return true; });
     const nos = list.map(p => p.no);
     if (nos.some(n => !Number.isFinite(n)) || new Set(nos).size !== nos.length) list = list.map((p, i) => ({ ...p, no: i + 1 }));
@@ -146,14 +149,45 @@
     renderRoster(skipped);
     touch('roster');
   }
+  /* 지난 '전체 출석부' 엑셀이면: 회차 열("1회차 (2026-10-01)")과 칸("출석 09:58 / 퇴실 12:01")을 읽어 이어 붙일 기록을 만든다 */
+  function detectHistory(headers, data) {
+    const cols = headers.map((h, i) => { const m = String(h).match(/^(.+?)\s*\((\d{4})[-.]\s*(\d{1,2})[-.]\s*(\d{1,2})\.?\)$/); return m ? { i, label: m[1].trim(), date: `${m[2]}-${m[3].padStart(2, '0')}-${m[4].padStart(2, '0')}` } : null; }).filter(Boolean);
+    const ni = headers.findIndex(h => KEYS.name.test(h)), di = headers.findIndex(h => KEYS.dept.test(h)), gi = headers.findIndex(h => String(h).trim() === '구분');
+    if (!cols.length || ni < 0 || !headers.some(h => String(h).trim() === '출석 횟수')) return null;
+    const tm = (date, hm) => hm ? `${date}T${hm.padStart(5, '0')}:00+09:00` : null;
+    let rows = 0;
+    const sessions = cols.map(c => {
+      const list = [];
+      data.forEach(r => {
+        const name = String(r[ni] || '').trim(), v = String(r[c.i] || '').trim(); if (!name || !v) return;
+        const a = v.match(/출석\s*(\d{1,2}:\d{2})/), o = v.match(/퇴실(?:만)?\s*(\d{1,2}:\d{2})/);
+        if (!a && !o) return;
+        list.push({ dept: di >= 0 ? String(r[di] || '').trim() : '', name, at: a ? tm(c.date, a[1]) : null, out_at: o ? tm(c.date, o[1]) : null });
+      });
+      rows += list.length;
+      const first = list.map(x => x.at || x.out_at).filter(Boolean).sort()[0];
+      return { label: c.label, started_at: first || `${c.date}T09:00:00+09:00`, rows: list };
+    });
+    return { sessions, rows, guCol: gi };
+  }
+  async function importHistory(id, tk) {
+    if (!state.history || !$('histChk') || !$('histChk').checked) return;
+    try {
+      const r = await A.rpc('import_history', { p_id: id, p_token: tk, p_sessions: state.history.sessions });
+      A.toast(r.sessions ? `지난 회차 ${r.sessions}개(출석 ${r.rows}건)를 이어 붙였어요` : '이미 이어 붙인 기록이라 건너뛰었어요', 'ok');
+      state.history = null;
+    } catch (e) { A.toast(A.noFn(e) ? '지난 기록을 이어 붙이려면 저장소 업데이트(update.sql)가 먼저 필요해요' : '지난 기록을 이어 붙이지 못했어요: ' + e.message, 'bad'); }
+  }
   function renderRoster(skipped = 0) {
     const r = state.roster;
     const names = {}; r.forEach(p => names[p.name] = (names[p.name] || 0) + 1);
     const dup = Object.keys(names).filter(n => names[n] > 1);
-    $('rosterInfo').innerHTML = r.length ? `<div class="ok-box"><b>${r.length}명</b>을 읽었어요.${skipped ? ` 이름이 빈 줄 ${skipped}개는 뺐어요.` : ''}
+    $('rosterInfo').innerHTML = r.length ? `<div class="ok-box"><b>${r.length}명</b>을 읽었어요.${skipped && !state.history ? ` 이름이 빈 줄 ${skipped}개는 뺐어요.` : ''}
       ${dup.length ? `<br>동명이인: ${dup.map(A.esc).join(', ')} — 휴대폰에서 부서와 함께 보여서 구분돼요.` : ''}</div>` : '';
     const ph = r.some(p => p.phone), nPh = r.filter(p => p.phone).length;
     if (r.length && ph) $('rosterInfo').firstElementChild.insertAdjacentHTML('beforeend', `<br>연락처 ${nPh}명 — 관리 링크로 연 화면(미참석자 확인)에서만 보이고, 참석자 휴대폰에는 나오지 않아요.`);
+    if (r.length && state.history) $('rosterInfo').insertAdjacentHTML('beforeend', `<div class="ok-box hist-box"><label class="check"><input type="checkbox" id="histChk" checked> <b>지난 출석 기록도 이어 붙이기</b></label>
+      <p class="hint" style="margin:4px 0 0">받아 두었던 '전체 출석부' 파일이에요. 지난 회차 ${state.history.sessions.length}개(출석 ${state.history.rows}건)를 ${EDIT ? '저장할' : '만들'} 때 함께 되살려요. 같은 회차를 두 번 올려도 한 번만 들어가요.</p></div>`);
     $('rosterTable').innerHTML = r.length ? `<thead><tr><th>연번</th><th>부서명</th><th>직위(직급)</th><th>성명</th>${ph ? '<th>연락처</th>' : ''}</tr></thead><tbody>` +
       r.map(p => `<tr><td>${p.no}</td><td>${A.esc(p.dept)}</td><td>${A.esc(p.rank)}</td><td>${A.esc(p.name)}</td>${ph ? `<td>${A.esc(p.phone || '')}</td>` : ''}</tr>`).join('') + '</tbody>' : '';
   }
@@ -393,6 +427,7 @@
       btn.textContent = '이미지 올리는 중…';
       await uploadAssets(r.id, r.token, keys);
       A.rememberEvent({ id: r.id, token: r.token, title: state.config.title });
+      await importHistory(r.id, r.token);
       changed = false;
       showDone(r.id, r.token);
     } catch (e) { $('createErr').textContent = e.message; btn.disabled = false; btn.textContent = created ? '이미지 다시 올리기' : '행사 만들기'; }
@@ -400,7 +435,7 @@
   function showDone(id, tk) {
     $('createBox').hidden = true; $('navBtns').hidden = true; document.querySelector('.steps').hidden = true;
     const d = $('doneBox'); d.hidden = false;
-    d.innerHTML = `<div class="done-hero"><div class="big-check">✓</div><h2>행사를 만들었어요</h2><p class="hint">아래 링크로 바로 시작하세요. 명단과 출석 기록은 마지막으로 쓴 날부터 <b>10일 뒤 자동으로 지워져요</b>. 출석부 엑셀은 미리 받아 두세요.</p></div>` + linkCards(id, tk)
+    d.innerHTML = `<div class="done-hero"><div class="big-check">✓</div><h2>행사를 만들었어요</h2><p class="hint">아래 링크로 바로 시작하세요. 명단과 출석 기록은 마지막으로 쓴 날부터 <b>${keepDays()}일 뒤 자동으로 지워져요</b>. 출석부 엑셀은 미리 받아 두세요.</p></div>` + linkCards(id, tk)
       + `<div class="row-btns"><a class="btn ghost" href="admin.html?e=${id}">설정 고치기</a><a class="btn ghost" href="index.html">처음으로</a></div>`;
     wireLinks(d, id, tk);
     try { sessionStorage.setItem('k:' + id, tk); } catch (e) {}
@@ -414,12 +449,17 @@
       await A.rpc('update_event', { p_id: eventId, p_token: token, p_config: state.config, p_roster: state.roster });
       await uploadAssets(eventId, token, [...state.dirty]);
       state.dirty.clear(); changed = false;
+      await importHistory(eventId, token);
       A.rememberEvent({ id: eventId, token, title: state.config.title });
       A.toast('저장했어요. 열려 있는 강의실 화면에도 곧 반영돼요.', 'ok');
     } catch (e) { A.toast(e.message, 'bad'); }
     btns.forEach(b => { b.disabled = false; });
   }
   $('saveBtn').onclick = save; $('saveTop').onclick = save;
+  $('extendBtn').onclick = async () => {
+    try { const r = await A.rpc('extend_keep', { p_id: eventId, p_token: token }); expiresAt = r.expires_at; renderSummary(); A.toast('보관 기간을 30일 늘렸어요 (오늘부터 최대 120일)', 'ok'); }
+    catch (e) { A.toast(A.noFn(e) ? '보관 연장은 저장소 업데이트(update.sql) 뒤에 쓸 수 있어요' : e.message, 'bad'); }
+  };
   $('delBtn').onclick = async () => {
     const ok = await A.dialog({ title: '행사 삭제', message: `"${state.config.title}" 행사와 모든 출석 기록을 지웁니다.\n되돌릴 수 없어요.`, ok: '삭제', danger: true });
     if (!ok) return;
@@ -445,7 +485,7 @@
     $('stepFinish').querySelector('span').textContent = '저장·관리'; $('firstSessionBox').hidden = true;
     try {
       const ev = await A.rpc('get_event', { p_id: eventId });
-      if (!ev) throw new Error('행사를 찾을 수 없어요 (마지막으로 쓴 날부터 10일이 지나 자동으로 지워졌을 수 있어요)');
+      if (!ev) throw new Error('행사를 찾을 수 없어요 (보관 기간이 지나 자동으로 지워졌을 수 있어요)');
       if (!token || !await A.rpc('check_admin', { p_id: eventId, p_token: token })) throw new Error('관리 링크로 열어야 고칠 수 있어요. 처음 만들 때 받은 관리 링크를 써 주세요.');
       state.config = A.withDefaults(ev.config); state.roster = ev.roster || []; expiresAt = ev.expires_at;
       try { const ph = await A.rpc('get_phones', { p_id: eventId, p_token: token }) || {}; state.roster = state.roster.map(p => ({ ...p, phone: ph[p.no] || '' })); } catch (e) {}

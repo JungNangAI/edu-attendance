@@ -41,6 +41,9 @@
       <p class="hint">한 휴대폰으로 낸 뒤에는 다른 이름으로 또 낼 수 없어요. 퇴실 체크를 쓰면 <b>입실한 휴대폰으로만 퇴실</b>할 수 있고, 엑셀에 '완료 / 퇴실 없음'이 나와요. 휴대폰이 없는 사람은 강의실 화면의 <b>직접 출석 처리</b>·<b>미참석자</b>에서 담당자가 대신 처리해요.</p>
       <label class="check"><input type="checkbox" data-k="attend.rotate_qr"> 30초마다 바뀌는 QR (그 자리에 있는 사람만 출석)</label>
       <p class="hint">QR을 찍어 다른 사람에게 보내도 금방 못 쓰게 돼요. QR은 <b>담당자용 강의실 화면</b>에만 나오고, A4 안내문·링크로는 출석할 수 없어요.</p>
+      <div class="field"><label class="f" for="cKeep">기록 보관 기간</label>
+        <select id="cKeep" data-k="keep_days"><option value="10">10일 — 한두 번 하는 교육·행사</option><option value="30">30일 — 매달 하는 회의</option><option value="60">60일</option><option value="90">90일 — 분기마다 하는 교육</option></select>
+        <p class="hint">마지막으로 쓴 날(출석·새 회차·저장)부터 이 기간이 지나면 명단과 출석 기록이 자동으로 지워져요. <b>연락처는 기간과 상관없이 10일 뒤 먼저 지워져요.</b></p></div>
     </section>
 
     <!-- 2. 명단 -->
@@ -193,9 +196,10 @@
       <div id="editBox" hidden>
         <h2>저장·관리</h2>
         <ul class="summary" id="summary2"></ul>
+        <div class="row-btns" style="margin:-4px 0 12px"><button type="button" class="btn ghost" id="extendBtn">보관 30일 연장</button></div>
         <button type="button" class="btn primary big" id="saveBtn">저장</button>
         <div id="linksEdit"></div>
-        <details class="danger-zone"><summary>행사 삭제</summary><p class="hint">행사·명단·모든 출석 기록이 바로 지워지고 되돌릴 수 없어요. (그냥 두어도 마지막으로 쓴 날부터 10일 뒤 자동으로 지워집니다)</p><button type="button" class="btn danger" id="delBtn">행사 삭제</button></details>
+        <details class="danger-zone"><summary>행사 삭제</summary><p class="hint">행사·명단·모든 출석 기록이 바로 지워지고 되돌릴 수 없어요. (그냥 두어도 보관 기간이 지나면 자동으로 지워집니다)</p><button type="button" class="btn danger" id="delBtn">행사 삭제</button></details>
       </div>
       <div id="doneBox" hidden></div>
     </section>

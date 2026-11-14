@@ -5,7 +5,7 @@
 
   /* ---------- 기본 설정 ---------- */
   const DEFAULT_CONFIG = {
-    title: '', subtitle: '', org: '', first_session: '1회차', block_duplicate: true,
+    title: '', subtitle: '', org: '', first_session: '1회차', block_duplicate: true, keep_days: '10',
     // 출석 방식: walkin 명단에 없는 사람도 받기 / one_phone 한 휴대폰 한 사람 / rotate_qr 30초마다 바뀌는 QR / depts 직접 쓸 때 보여 줄 부서 목록
     attend: { walkin: false, one_phone: false, rotate_qr: false, depts: [] },
     screen: {
@@ -58,6 +58,8 @@
 
   /* ---------- 저장소 호출 ---------- */
   class RpcError extends Error {}
+  // 저장소에 아직 그 함수가 없을 때(업데이트 SQL을 아직 안 돌림) — 예전 함수로 대신하기 위해
+  const noFn = e => !!e && (e.status === 404 || e.code === 'PGRST202' || /Could not find the function|does not exist/i.test(e.message || ''));
   async function rpc(fn, args) {
     if (!CFG.supabaseUrl || !CFG.supabaseKey) throw new RpcError('저장소(Supabase) 설정이 아직 없습니다. config.js를 확인해 주세요.');
     const key = CFG.supabaseKey;
@@ -69,7 +71,7 @@
     } catch (e) { throw new RpcError('인터넷 연결을 확인해 주세요.'); }
     const text = await res.text();
     let data = null; try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
-    if (!res.ok) throw new RpcError((data && data.message) || ('저장소 오류 (' + res.status + ')'));
+    if (!res.ok) { const er = new RpcError((data && data.message) || ('저장소 오류 (' + res.status + ')')); er.status = res.status; er.code = data && data.code; throw er; }
     return data;
   }
 
@@ -81,6 +83,7 @@
     join: siteBase() + 'join.html?e=' + id,
     screen: siteBase() + 'screen.html?e=' + id,
     screenAdmin: siteBase() + 'screen.html?e=' + id + '#k=' + token,
+    screenPhone: siteBase() + 'screen.html?e=' + id + '&phone=1#k=' + token,
     admin: siteBase() + 'admin.html?e=' + id + '#k=' + token,
     cert: siteBase() + 'cert.html?e=' + id
   });
@@ -213,11 +216,11 @@
     t.textContent = msg; t.className = 'show ' + kind;
     clearTimeout(toast._t); toast._t = setTimeout(() => t.className = '', 2800);
   }
-  function dialog({ title, message = '', ok = '확인', cancel = '취소', input = null, danger = false }) {
+  function dialog({ title, message = '', html = '', ok = '확인', cancel = '취소', input = null, danger = false, timeout = 0 }) {
     return new Promise(resolve => {
       const wrap = document.createElement('div'); wrap.className = 'app-modal';
       wrap.innerHTML = `<div class="app-modal-box" role="dialog" aria-modal="true" aria-labelledby="amt">
-        <h2 id="amt">${esc(title)}</h2>${message ? `<p>${esc(message).replace(/\n/g, '<br>')}</p>` : ''}
+        <h2 id="amt">${esc(title)}</h2>${message ? `<p>${esc(message).replace(/\n/g, '<br>')}</p>` : ''}${html}
         ${input !== null ? `<input type="text" class="app-modal-input" value="${esc(input)}" maxlength="40">` : ''}
         <div class="app-modal-btns">${cancel ? `<button type="button" class="btn ghost" data-v="0">${esc(cancel)}</button>` : ''}
         <button type="button" class="btn ${danger ? 'danger' : 'primary'}" data-v="1">${esc(ok)}</button></div></div>`;
@@ -227,7 +230,14 @@
       wrap.addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (b) done(b.dataset.v === '1'); else if (e.target === wrap && cancel) done(false); });
       wrap.addEventListener('keydown', e => { if (e.key === 'Escape' && cancel) done(false); if (e.key === 'Enter' && inp) done(true); });
       requestAnimationFrame(() => { wrap.classList.add('in'); (inp || wrap.querySelector('[data-v="1"]')).focus(); if (inp) inp.select(); });
+      if (timeout) setTimeout(() => { if (wrap.isConnected) done(false); }, timeout);
     });
+  }
+  // 관리 화면을 담당자 휴대폰으로: 휴대폰 카메라로 찍으면 바로 열린다(주소 복사·카톡 옮기기 없이)
+  function phoneOpen(id, tk) {
+    const url = links(id, tk).screenPhone;
+    return dialog({ title: '내 휴대폰으로 열기', ok: '닫기', cancel: null, timeout: 90000,
+      html: `<div class="pq">${qrSvg(url)}</div><p>휴대폰 카메라로 찍으면 <b>미참석자 목록</b>이 바로 열려요. 번호를 누르면 전화가 걸려요.</p><p class="pq-warn">이 QR에는 관리 열쇠가 들어 있어요. 프로젝터에 띄운 화면이라면 잠깐 화면 연결을 끄고 찍으세요. 1분 30초 뒤 저절로 닫혀요.</p>` });
   }
 
   /* ---------- 축하 꽃가루 ---------- */
@@ -255,8 +265,8 @@
 
   window.App = {
     CFG, ready: !!(CFG.supabaseUrl && CFG.supabaseKey), DEFAULT_CONFIG, THEMES, PALETTES, withDefaults, merge,
-    rpc, RpcError, query, hashParam, links, siteBase, takeToken, deviceId, myEvents, rememberEvent, forgetEvent,
+    rpc, RpcError, noFn, query, hashParam, links, siteBase, takeToken, deviceId, myEvents, rememberEvent, forgetEvent,
     esc, josa, hhmm, ymd, shortDate, applyColors, contrast, mix, lum,
-    loadImage, shrinkImage, fetchAsDataUrl, loadAssets, qrCanvas, qrSvg, download, toast, dialog, confetti
+    loadImage, shrinkImage, fetchAsDataUrl, loadAssets, qrCanvas, qrSvg, download, toast, dialog, phoneOpen, confetti
   };
 })();

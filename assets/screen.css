@@ -132,3 +132,23 @@ body.no-roster .count-num span{display:none}
 /* 관리 도구가 소리 조절(화면 아래 가운데)에 가리지 않게 위로 */
 .admin-bar{z-index:1450}
 .absent{z-index:1451}
+
+/* 오래 조용하면 쉬는 화면(전송량 아끼기) */
+.rest{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;background:rgba(10,14,26,.72);backdrop-filter:blur(4px);cursor:pointer}
+.rest>div{background:#fff;color:#222b45;border-radius:22px;padding:28px 36px;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.35);display:grid;gap:10px;max-width:min(520px,86vw)}
+.rest b{font-size:clamp(20px,2.4vw,30px)}.rest span{font-size:clamp(14px,1.4vw,18px);color:#4a5068;line-height:1.5}
+
+/* 관리 버튼: 자주 쓰는 것만 밖에, 나머지는 [더보기] */
+.admin-bar{position:fixed}
+.more-menu{position:absolute;right:0;bottom:calc(100% + 8px);display:grid;gap:4px;min-width:200px;padding:8px;background:#1f2740;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.4)}
+.more-menu[hidden]{display:none}
+.more-menu button{text-align:left;background:transparent!important}
+.more-menu button:hover{background:#2f3a5c!important}
+/* 담당자 휴대폰: 큰 화면 대신 미참석자 목록부터 */
+body.phone-admin .absent{inset:0;width:auto;border-radius:0;font-size:16px;bottom:64px}
+body.phone-admin .absent .ab-note{display:none}
+body.phone-admin .admin-bar{left:8px;right:8px;bottom:8px;max-width:none;justify-content:center}
+body.phone-admin .admin-bar.idle{opacity:1;transform:none;pointer-events:auto}
+body.phone-admin .admin-bar button{font-size:13px;padding:8px 10px}
+body.phone-admin .admin-tip,body.phone-admin #snd{display:none!important}
+body.phone-admin .ab-list a{font-size:17px;font-weight:700;padding:4px 8px}

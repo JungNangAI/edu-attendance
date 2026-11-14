@@ -723,10 +723,41 @@
     const am = await A.loadAssets(eventId, keys);
     return { ev, am };
   }
+  /* 몇 초마다 새 출석이 있는지 묻는다. 바뀐 게 없으면 저장소가 '같음'만 짧게 돌려줘 전송량이 아주 적다.
+     한동안 아무도 안 찍으면 묻는 간격을 늘리고, 2시간 넘게 조용하면 화면을 '쉬는 중'으로 멈춘다 */
+  let boardVer = null, useV2 = true, quietSince = Date.now(), resting = false, pollT = 0;
+  async function fetchBoard() {
+    if (useV2) {
+      try { const b = await A.rpc('get_board2', { p_id: eventId, p_ver: boardVer }); if (b && b.v) boardVer = b.v; return b; }
+      catch (e) { if (!A.noFn(e)) throw e; useV2 = false; }   // 업데이트 SQL 전이면 예전 방식
+    }
+    return A.rpc('get_board', { p_id: eventId });
+  }
+  function nextDelay() {
+    if (failCount) return Math.min(15000, 2500 * failCount);
+    if (document.hidden) return 20000;
+    const q = Date.now() - quietSince;
+    return q < 3 * 60e3 ? 2500 : q < 15 * 60e3 ? 5000 : 10000;
+  }
+  function rest() {
+    resting = true; clearTimeout(qrT); try { Sound.stopBgm(); } catch (e) {}
+    $('rest').hidden = false;
+  }
+  function wake() {
+    if (!resting) return; resting = false; $('rest').hidden = true; quietSince = Date.now();
+    refreshQr(); try { Sound.refresh(); } catch (e) {} clearTimeout(pollT); poll();
+  }
   async function poll() {
+    if (resting) return;
     try {
-      const b = await A.rpc('get_board', { p_id: eventId });
-      if (!b) { full('행사를 찾을 수 없습니다', '주소가 맞는지, 마지막으로 쓴 날부터 10일(보관 기간)이 지나지 않았는지 확인해 주세요.'); return; }
+      const b = await fetchBoard();
+      if (b && b.same) {
+        failCount = 0; $('session').classList.remove('off'); $('conn').textContent = '';
+        if (Date.now() - quietSince > 2 * 3600e3 && !document.hidden) { rest(); return; }
+        pollT = setTimeout(poll, nextDelay()); return;
+      }
+      quietSince = Date.now();
+      if (!b) { full('행사를 찾을 수 없습니다', '주소가 맞는지, 보관 기간(기본 10일)이 지나지 않았는지 확인해 주세요.'); return; }
       failCount = 0; $('session').classList.remove('off'); $('conn').textContent = '';
       if (updatedAt && b.updated_at !== updatedAt) {   // 설정이 바뀌었으면 다시 불러옴
         const r = await loadEvent();
@@ -758,7 +789,7 @@
       failCount++;
       if (failCount >= 2) { $('session').classList.add('off'); $('conn').textContent = '연결이 끊겨 다시 연결하는 중…'; }
     }
-    setTimeout(poll, failCount ? Math.min(15000, 2500 * failCount) : 2500);
+    pollT = setTimeout(poll, nextDelay());
   }
   function full(title, msg) { const f = $('full'); f.hidden = false; f.innerHTML = `<div><h1>${A.esc(title)}</h1><p>${A.esc(msg)}</p></div>`; }
 
@@ -936,9 +967,19 @@
     A.rpc('get_phones', { p_id: eventId, p_token: token }).then(ph => { phones = ph || {}; if (!$('absent').hidden) renderAbsent(); }).catch(() => {});
     $('aFull').onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {});
     $('aEdit').onclick = () => window.open(A.links(eventId, token).admin, '_blank', 'noopener');
+    const menu = $('moreMenu'), more = $('aMore');
+    const closeMenu = () => { menu.hidden = true; more.setAttribute('aria-expanded', 'false'); };
+    more.onclick = e => { e.stopPropagation(); menu.hidden = !menu.hidden; more.setAttribute('aria-expanded', String(!menu.hidden)); };
+    menu.addEventListener('click', () => setTimeout(closeMenu, 0)); addEventListener('click', e => { if (!e.target.closest('#adminBar')) closeMenu(); });
+    $('aPhone').onclick = () => A.phoneOpen(eventId, token);
+    // 휴대폰으로 열었으면: 큰 화면 대신 미참석자 목록부터 보여 준다
+    if (new URLSearchParams(location.search).get('phone') || matchMedia('(max-width: 760px)').matches) {
+      document.body.classList.add('phone-admin'); toggleAbsent(true);
+    }
     markCancelable();
   }
 
+  $('rest').addEventListener('click', () => wake()); addEventListener('keydown', () => wake());
   let resizeT = 0;
   addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(buildBoard, 200); });
 
@@ -972,7 +1013,7 @@
     if (!eventId) { full('행사 주소가 없습니다', '행사 만들기를 마치면 나오는 "강의실 화면" 링크로 열어 주세요.'); return; }
     try {
       const r = await loadEvent();
-      if (!r) { full('행사를 찾을 수 없습니다', '주소가 맞는지, 마지막으로 쓴 날부터 10일(보관 기간)이 지나지 않았는지 확인해 주세요.'); return; }
+      if (!r) { full('행사를 찾을 수 없습니다', '주소가 맞는지, 보관 기간(기본 10일)이 지나지 않았는지 확인해 주세요.'); return; }
       applyEvent(r.ev, r.am); eventSig = sigOf(r);
       token = A.takeToken(eventId);
       if (token) isAdmin = await A.rpc('check_admin', { p_id: eventId, p_token: token }).catch(() => false);

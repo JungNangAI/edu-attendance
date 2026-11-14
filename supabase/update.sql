@@ -652,8 +652,9 @@ begin
   for x in select * from jsonb_array_elements(p_sessions) loop
     lb := _clean_text(x->>'label', 40); st := (x->>'started_at')::timestamptz;
     if lb = '' or st is null then continue; end if;
-    if exists (select 1 from sessions where event_id = p_id and label = lb
-                 and (started_at at time zone 'Asia/Seoul')::date = (st at time zone 'Asia/Seoul')::date) then continue; end if;
+    if exists (select 1 from sessions ss where ss.event_id = p_id and ss.label = lb
+                 and (ss.started_at at time zone 'Asia/Seoul')::date = (st at time zone 'Asia/Seoul')::date
+                 and exists (select 1 from attendance a where a.session_id = ss.id)) then continue; end if;   -- 출석이 든 같은 회차만 건너뜀
     if jsonb_array_length(coalesce(x->'rows', '[]'::jsonb)) > 5000 then raise exception '한 회차는 5000명까지예요'; end if;
     insert into sessions(event_id, label, started_at) values (p_id, lb, st) returning id into sid;
     ns := ns + 1;
