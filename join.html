@@ -40,7 +40,10 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
 .note{font-size:13px;color:var(--muted);text-align:center;margin:14px 0 0}
 .err{color:var(--bad);font-size:14px;margin:8px 0 0;min-height:1em}
 
-.result{text-align:center;padding:28px 18px}
+.result{text-align:center;padding:24px 18px 28px}
+.result .mascot{width:150px;margin:-6px auto 6px;animation:popIn .7s cubic-bezier(.2,1.4,.4,1) both}
+.result .check{width:46px;height:46px;margin:-34px auto 8px;position:relative;left:52px;background:#fff;border-radius:50%}
+.full .mascot{width:150px;margin:0 auto 12px}
 .check{width:96px;height:96px;margin:0 auto 14px}
 .check circle{fill:none;stroke:var(--ok);stroke-width:5;stroke-dasharray:283;stroke-dashoffset:283;animation:draw .7s ease forwards}
 .check path{fill:none;stroke:var(--ok);stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:60;stroke-dashoffset:60;animation:draw .45s .55s ease forwards}
@@ -105,7 +108,7 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
   let enter = null, pass = null, legacy = false, meP = null;
 
   function show(which){ ['formPanel','result','full'].forEach(id => $(id).hidden = id !== which); $('bottom').hidden = which !== 'formPanel'; }
-  function full(t, m){ $('full').innerHTML = `<h2>${A.esc(t)}</h2><p class="hint">${A.esc(m)}</p>`; show('full'); }
+  function full(t, m){ $('full').innerHTML = `<img class="mascot" src="assets/defaults/call.png" alt=""><h2>${A.esc(t)}</h2><p class="hint">${A.esc(m)}</p>`; show('full'); }
   const isOut = () => !!(session && session.mode === 'out');
   const word = () => isOut() ? '퇴실' : '출석';
   const strictOn = () => !!(enter && enter.strict);
@@ -177,7 +180,8 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
     const dup = r.status === 'dup', out = r.kind === 'out';
     const certOk = cfg.cert.enabled && (cfg.cert.only_attendees !== 'inout' || out);
     $('result').className = 'panel result' + (dup ? ' dup' : '');
-    $('result').innerHTML = `<svg class="check" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="45"/><path d="M30 52l13 13 27-29"/></svg>
+    const pic = dup ? 'main' : out ? 'night' : 'welcome';
+    $('result').innerHTML = `<img class="mascot" src="assets/defaults/${pic}.png" alt=""><svg class="check" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="45"/><path d="M30 52l13 13 27-29"/></svg>
       <h2>${A.esc(out ? (dup ? '이미 퇴실했습니다' : '퇴실했습니다') : (dup ? '이미 출석했습니다' : cfg.join.ok_title))}</h2>
       <div class="who-line">${A.esc(r.dept)} ${A.esc(r.name)} 님</div>
       <p class="meta">${A.esc(r.session || '')} · ${out && r.in_at ? A.hhmm(r.in_at) + ' 입실 · ' : ''}${r.at ? A.hhmm(r.at) : ''} ${out ? '퇴실' : dup ? '제출' : '출석'}</p>

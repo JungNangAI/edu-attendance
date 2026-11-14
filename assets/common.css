@@ -1,7 +1,10 @@
 /* 공통 화면 스타일 (시작·행사 만들기·참석자·위촉장 화면) */
 :root{
-  --bg:#f4f6fa; --panel:#ffffff; --text:#1b2133; --muted:#5c6378; --line:#dfe2ec;
-  --accent:#1f3a5f; --on-accent:#ffffff; --soft:#e8edf5; --ink:#1f3a5f;
+  --bg:#fffaf0; --panel:#ffffff; --text:#1e2640; --muted:#5d6377; --line:#ecdfbf;
+  --accent:#222b45; --on-accent:#ffffff; --soft:#fff2c7; --ink:#222b45;
+  /* 중랑 슬로건 색 */
+  --jn-yellow:#ffd43b; --jn-green:#106A3A; --jn-purple:#9E1C84; --jn-blue:#0057A3;
+  --tri:linear-gradient(90deg,var(--jn-green) 0 33.3%,var(--jn-purple) 33.3% 66.6%,var(--jn-blue) 66.6%);
   --ok:#1d6b45; --ok-soft:#e3f1e8; --warn:#8a5a00; --warn-soft:#fff3d6; --bad:#a3262a; --bad-soft:#fde7e7;
   --radius:14px; --shadow:0 1px 2px rgba(20,30,60,.06),0 6px 24px rgba(20,30,60,.07);
   --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
@@ -56,8 +59,15 @@ textarea{min-height:110px;resize:vertical}
 
 .app-confetti{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:998}
 
-/* 공통 머리띠 */
-.topbar{background:var(--accent);color:var(--on-accent);padding:18px 16px 16px}
+/* 공통 머리띠: 중랑 노랑 + 아래 3색 띠 */
+.topbar{background:var(--jn-yellow);color:var(--ink);padding:18px 16px 16px;position:relative}
+.topbar::after{content:"";position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--tri)}
+.topbar .slogan{height:26px;width:auto;display:block}
+.tri{display:flex;height:6px;background:var(--tri)}
+/* 글주임 캐릭터 */
+.mascot{display:block;height:auto;user-select:none;pointer-events:none;filter:drop-shadow(0 6px 10px rgba(60,40,0,.12))}
+@keyframes bob{50%{transform:translateY(-6px) rotate(-1.5deg)}}
+@keyframes popIn{0%{transform:scale(.4) translateY(20px);opacity:0}70%{transform:scale(1.06)}100%{transform:none;opacity:1}}
 .topbar .wrap{display:flex;align-items:center;gap:14px}
 .topbar img.logo{max-height:44px;max-width:150px;object-fit:contain}
 .topbar .eyebrow{font-size:13px;opacity:.8}

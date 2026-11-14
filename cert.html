@@ -16,6 +16,7 @@
 .head h1{font-family:var(--f-display);font-size:30px;margin:4px 0}
 .head p{margin:0;opacity:.85;font-size:15px}
 .head img{max-height:52px;max-width:200px;object-fit:contain}
+.head .mascot{max-height:none;max-width:none;width:96px;margin:-10px 0 -26px;animation:bob 4.5s ease-in-out infinite}
 .tri{display:flex;height:6px}.tri i{flex:1}.tri i:nth-child(1){background:#106A3A}.tri i:nth-child(2){background:#9E1C84}.tri i:nth-child(3){background:#0057A3}
 .grid{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:24px;align-items:start}
 .field{margin-bottom:14px}
@@ -34,8 +35,8 @@
 </style>
 </head>
 <body>
-<header class="head"><div class="wrap"><div class="t"><div class="eyebrow" id="eyebrow"></div><h1 id="h1">위촉장 받기</h1><p id="lead"></p></div><div id="logo"></div></div></header>
-<div class="tri" aria-hidden="true"><i></i><i></i><i></i></div>
+<header class="head"><div class="wrap"><div class="t"><div class="eyebrow" id="eyebrow"></div><h1 id="h1">위촉장 받기</h1><p id="lead"></p></div><div id="logo"><img class="mascot" src="assets/defaults/relay.png" alt=""></div></div></header>
+<div class="tri" aria-hidden="true"></div>
 <div class="page"><div class="wrap">
   <div class="grid" id="main" hidden>
     <div>
