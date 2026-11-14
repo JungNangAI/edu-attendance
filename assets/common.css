@@ -81,3 +81,9 @@ textarea{min-height:110px;resize:vertical}
 .app-modal .pq{display:grid;place-items:center;margin:6px 0 10px}
 .app-modal .pq svg{width:min(240px,62vw);height:auto;background:#fff;padding:10px;border-radius:12px;border:1px solid #e3e6ee}
 .app-modal .pq-warn{font-size:13px;color:#8a4b08;background:#fff6e6;border-radius:10px;padding:8px 10px}
+
+/* 화면마다 가장 중요한 버튼 하나만 입체(3D): 눌리는 느낌 */
+.btn.primary.big,#next,.btn.cta{box-shadow:0 5px 0 color-mix(in srgb,var(--accent) 60%,#000),0 8px 18px color-mix(in srgb,var(--accent) 25%,transparent);transform:translateY(0);transition:transform .08s,box-shadow .08s}
+.btn.primary.big:hover,#next:hover,.btn.cta:hover{transform:translateY(-1px);box-shadow:0 6px 0 color-mix(in srgb,var(--accent) 60%,#000),0 10px 22px color-mix(in srgb,var(--accent) 30%,transparent)}
+.btn.primary.big:active,#next:active,.btn.cta:active{transform:translateY(4px);box-shadow:0 1px 0 color-mix(in srgb,var(--accent) 60%,#000)}
+.btn.primary.big:disabled{box-shadow:none;transform:none}

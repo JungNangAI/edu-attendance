@@ -124,3 +124,11 @@ table.roster th{background:var(--soft);position:sticky;top:0}
 .attend-box{background:var(--soft);border-radius:12px;padding:12px 14px;margin:12px 0}
 .attend-box .check{margin:0}
 .attend-box .field{margin:10px 0 0}
+
+/* 3단계: 자주 안 바꾸는 것은 접어 둔다 */
+.more-set{margin-top:18px;border:1px solid var(--line);border-radius:14px;padding:4px 14px;background:var(--soft)}
+.more-set[open]{padding-bottom:14px;background:transparent}
+.more-set>summary{cursor:pointer;font-weight:700;padding:12px 0;list-style:none}
+.more-set>summary::-webkit-details-marker{display:none}
+.more-set>summary::before{content:'▸ ';color:var(--muted)}.more-set[open]>summary::before{content:'▾ '}
+.more-set>summary span{font-weight:400;font-size:13px;color:var(--muted);margin-left:6px}
