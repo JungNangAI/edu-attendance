@@ -21,7 +21,6 @@
   const extraHere = () => displayed.concat(queue).filter(no => !rosterNos.has(no)).length;
   const pctNow = () => roster.length ? Math.floor(rosterHere() * 100 / roster.length) : 0;
   const msReached = () => roster.length ? (MILESTONES.filter(m => pctNow() >= m).pop() || 0) : (COUNT_MS.filter(m => displayed.length >= m).pop() || 0);
-  const SOUND_OF = { lantern: 'star', forest: 'garden', chalk: 'card', memo: 'card', led: 'apartment', train: 'apartment', ocean: 'star', plaque: 'garden' };   // 새 테마가 빌려 쓰는 음악
 
   /* ---------- 작은 도구 ---------- */
   function seeded(seed) { let s = seed >>> 0 || 1; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
@@ -529,7 +528,7 @@
   function buildBoard() {
     const board = $('board'); castStop();
     board.innerHTML = '';
-    Sound.configure(new URLSearchParams(location.search).get('sound') || cfg.screen.sound); Sound.mountUi(); Sound.setTheme(SOUND_OF[theme] || theme);
+    Sound.configure(new URLSearchParams(location.search).get('sound') || cfg.screen.sound); Sound.mountUi(); Sound.setTheme(cfg.screen.music && cfg.screen.music !== 'auto' ? cfg.screen.music : theme);   // 음악 분위기: 자동이면 테마에 맞춰
     document.body.className = document.body.className.replace(/theme-\S+/, '') + ' theme-' + theme;
     const impl = THEME_IMPL[theme] || THEME_IMPL.card;
     slots = impl.build(board, totalSlots());

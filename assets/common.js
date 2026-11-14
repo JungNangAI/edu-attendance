@@ -9,7 +9,7 @@
     // 출석 방식: walkin 명단에 없는 사람도 받기 / one_phone 한 휴대폰 한 사람 / rotate_qr 30초마다 바뀌는 QR / depts 직접 쓸 때 보여 줄 부서 목록
     attend: { walkin: false, one_phone: false, rotate_qr: false, depts: [] },
     screen: {
-      theme: 'card', bg: '#f5f6fa', accent: '#212b46', bg_image: 'soft', characters: true, motion: 'normal', sound: 'both', checkout: 'off',
+      theme: 'card', bg: '#f5f6fa', accent: '#212b46', bg_image: 'soft', characters: true, motion: 'normal', sound: 'both', music: 'auto', checkout: 'off',
       texts: {
         chip: '출석 체크', qr_hint: '휴대폰 카메라로 QR을 찍고\n내 이름을 고르세요', welcome: '님 환영합니다',
         unit: '명 출석', foot: '제출하면 몇 초 안에 화면에 이름이 나옵니다.', tag1: '', tag2: '', done: '모두 출석했습니다!', cheer: '환영해요!'
