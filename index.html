@@ -7,25 +7,26 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
-<link rel="stylesheet" href="assets/common.css?v=20261115b">
+<link rel="stylesheet" href="assets/common.css?v=20261115c">
 <style>
-.hero{background:radial-gradient(circle at 85% 20%,#fff3b0 0,transparent 42%),linear-gradient(160deg,#ffe066 0%,#ffd43b 60%,#ffc928 100%);color:var(--ink);padding:30px 16px 74px;position:relative;overflow:hidden}
+.hero{background:radial-gradient(circle at 88% 12%,rgba(255,255,255,.20) 0,transparent 38%),radial-gradient(circle at 8% 115%,rgba(255,105,180,.28) 0,transparent 45%),linear-gradient(150deg,#22124F 0%,#3D1E8C 42%,#6A35D6 78%,#8A55F0 100%);color:#fff;padding:30px 16px 74px;position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.035) 0 2px,transparent 2px 22px);pointer-events:none}
 .hero .wrap{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:24px}
 .hero .slogan{height:34px;width:auto;margin-bottom:26px}
-.hero .eyebrow{display:inline-block;font-size:14px;font-weight:700;background:var(--ink);color:#fff;border-radius:99px;padding:4px 12px}
-.hero h1{font-size:clamp(32px,5.4vw,50px);margin:12px 0 10px;letter-spacing:-.02em;font-weight:800}
-.hero h1 em{font-style:normal;color:var(--jn-purple)}
-.hero p{max-width:560px;margin:0 0 24px;font-size:17px;color:#3a3f52}
-.hero .btn{background:var(--ink);color:#fff;font-size:17px;padding:15px 26px;border-radius:14px;box-shadow:0 6px 0 #0f1424}
+.hero .eyebrow{display:inline-block;font-size:14px;font-weight:700;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:99px;padding:4px 12px;backdrop-filter:blur(4px)}
+.hero h1{font-size:clamp(32px,5.4vw,50px);margin:12px 0 10px;letter-spacing:-.02em;font-weight:800;color:#fff;text-shadow:0 2px 18px rgba(20,8,60,.35)}
+.hero h1 em{font-style:normal;background:linear-gradient(90deg,#FFE784,#FFC21A);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{max-width:560px;margin:0 0 24px;font-size:17px;color:rgba(255,255,255,.86)}
+.hero .btn{background:linear-gradient(180deg,#FFE066,#FFC928);color:#2A1660;font-size:17px;font-weight:800;padding:15px 26px;border-radius:14px;box-shadow:0 6px 0 #B98D0F,0 12px 26px rgba(20,8,60,.35)}
 .hero .btn:hover{transform:translateY(-1px)}
-.hero .btn:active{transform:translateY(4px);box-shadow:0 2px 0 #0f1424}
+.hero .btn:active{transform:translateY(4px);box-shadow:0 2px 0 #B98D0F}
 .hero .cast{position:relative;width:min(40vw,400px);margin-bottom:-30px}
-.hero .cast .mascot{width:100%;animation:bob 4.5s ease-in-out infinite}
-.hero .cast .bubble{position:absolute;z-index:2;left:-120px;top:10px;background:#fff;border:2.5px solid var(--ink);border-radius:18px;padding:8px 14px;font-weight:700;font-size:15px;white-space:nowrap;animation:popIn .6s .4s both}
-.hero .cast .bubble::after{content:"";position:absolute;right:-10px;top:12px;width:16px;height:16px;background:#fff;border-right:2.5px solid var(--ink);border-top:2.5px solid var(--ink);transform:rotate(45deg)}
+.hero .cast .mascot{width:100%;animation:bob 4.5s ease-in-out infinite;filter:drop-shadow(0 14px 22px rgba(20,8,60,.35))}
+.hero .cast .bubble{position:absolute;z-index:2;left:-120px;top:10px;background:#fff;color:#2A1660;border:2.5px solid #2A1660;border-radius:18px;padding:8px 14px;font-weight:700;font-size:15px;white-space:nowrap;animation:popIn .6s .4s both}
+.hero .cast .bubble::after{content:"";position:absolute;right:-10px;top:12px;width:16px;height:16px;background:#fff;border-right:2.5px solid #2A1660;border-top:2.5px solid #2A1660;transform:rotate(45deg)}
 .hero .dots{position:absolute;left:52%;top:24px;display:grid;grid-template-columns:repeat(5,30px);gap:7px;opacity:.85}
-.hero .dots i{width:30px;height:22px;border-radius:6px;background:rgba(34,43,69,.10);animation:lit 6s infinite}
-@keyframes lit{0%,60%,100%{background:rgba(34,43,69,.10)}70%,90%{background:#fff;box-shadow:0 0 14px #fff}}
+.hero .dots i{width:30px;height:22px;border-radius:6px;background:rgba(255,255,255,.08);animation:lit 6s infinite}
+@keyframes lit{0%,60%,100%{background:rgba(255,255,255,.08)}70%,90%{background:#FFE784;box-shadow:0 0 16px #FFD43B}}
 .flow{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:-40px auto 26px;position:relative}
 .flow .card{display:flex;gap:12px;align-items:flex-start;padding:18px 16px;border-top:5px solid var(--c)}
 .flow .card:nth-child(1){--c:var(--jn-green)}.flow .card:nth-child(2){--c:var(--jn-purple)}.flow .card:nth-child(3){--c:var(--jn-blue)}
@@ -54,7 +55,7 @@
 <body>
 <section class="hero"><div class="dots" aria-hidden="true"></div><div class="wrap">
   <div>
-    <img class="slogan" src="assets/defaults/jungnang_slogan.png" alt="나의 자랑 우리 중랑">
+    <img class="slogan" src="assets/defaults/jungnang_slogan_white.png" alt="나의 자랑 우리 중랑">
     <div><span class="eyebrow">QR 하나로 출석부터 위촉장까지 · 교육·회의·행사</span></div>
     <h1>글주임 <em>출석부</em></h1>
     <p>명단 엑셀만 올리면 강의실 화면에 QR이 뜨고, 참석자가 찍는 대로 이름이 하나씩 켜져요. 명단 없이 오는 대로 받을 수도 있어요. 출석부 엑셀과 위촉장·수료증까지 한 번에.</p>

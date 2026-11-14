@@ -60,7 +60,7 @@ textarea{min-height:110px;resize:vertical}
 .app-confetti{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:998}
 
 /* 공통 머리띠: 중랑 노랑 + 아래 3색 띠 */
-.topbar{background:var(--jn-yellow);color:var(--ink);padding:18px 16px 16px;position:relative}
+.topbar{background:radial-gradient(circle at 88% 12%,rgba(255,255,255,.20) 0,transparent 38%),radial-gradient(circle at 8% 115%,rgba(255,105,180,.28) 0,transparent 45%),linear-gradient(150deg,#22124F 0%,#3D1E8C 42%,#6A35D6 78%,#8A55F0 100%);color:#fff;padding:18px 16px 16px;position:relative}
 .topbar::after{content:"";position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--tri)}
 .topbar .slogan{height:26px;width:auto;display:block}
 .tri{display:flex;height:6px;background:var(--tri)}
@@ -70,7 +70,7 @@ textarea{min-height:110px;resize:vertical}
 @keyframes popIn{0%{transform:scale(.4) translateY(20px);opacity:0}70%{transform:scale(1.06)}100%{transform:none;opacity:1}}
 .topbar .wrap{display:flex;align-items:center;gap:14px}
 .topbar img.logo{max-height:44px;max-width:150px;object-fit:contain}
-.topbar .eyebrow{font-size:13px;opacity:.8}
+.topbar .eyebrow{font-size:13px;color:rgba(255,255,255,.78)}
 .topbar h1{font-size:21px}
 .wrap{max-width:1100px;margin:0 auto}
 .page{padding:20px 16px 48px}
