@@ -5,7 +5,7 @@ body{background:var(--bg)}
 .topbar .home:hover{background:rgba(255,255,255,.14)}
 .topbar .wrap{position:relative}
 .topbar .slogan{height:22px;margin-right:6px}
-.topbar .eyebrow{color:#5a4a00;opacity:1;font-weight:600}
+.topbar .eyebrow{color:#FFE784;opacity:1;font-weight:600}
 .topbar .peek{position:absolute;right:-4px;bottom:-14px;width:62px;transform:rotate(6deg)}
 .topbar{padding-bottom:16px}
 .topbar .save{margin-right:66px}
