@@ -361,7 +361,7 @@
     epic: ['epic_city_key', 'epic_chuncheon_autumn'],
     dream: ['dream_green_apple']
   };
-  const NEXT = { pop: ['pop', 'calm'], calm: ['calm', 'dream', 'pop'], dream: ['dream', 'calm', 'epic'], epic: ['epic', 'dream', 'pop'] };
+  const NEXT = { pop: ['pop'], calm: ['calm', 'dream'], dream: ['dream', 'calm'], epic: ['epic', 'dream'] };   // 분위기가 갑자기 바뀌지 않게 비슷한 곡끼리만
   const fileStyle = th => { const st = styleOf(th); return st === 'waltz' ? 'calm' : st; };
   const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const MUSIC_BASE = (() => { try { const s = document.currentScript && document.currentScript.src; return s ? s.replace(/sound\.js.*$/, 'music/') : 'assets/music/'; } catch (e) { return 'assets/music/'; } })();
