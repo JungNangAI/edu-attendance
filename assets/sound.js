@@ -358,7 +358,7 @@
   const MUSIC = {
     pop: ['pop_beautiful_korea', 'pop_colors_of_life', 'pop_game', 'pop_morning_kiss'],
     calm: ['calm_how_are_you', 'calm_consolation', 'calm_traumerei', 'calm_bach_largo', 'calm_liebestraum', 'calm_piano_man'],
-    epic: ['epic_city_key', 'epic_chuncheon_autumn'],
+    epic: ['epic_city_key', 'epic_chuncheon_autumn', 'epic_bed'],
     dream: ['dream_green_apple']
   };
   const NEXT = { pop: ['pop'], calm: ['calm', 'dream'], dream: ['dream', 'calm'], epic: ['epic', 'dream'] };   // 분위기가 갑자기 바뀌지 않게 비슷한 곡끼리만
