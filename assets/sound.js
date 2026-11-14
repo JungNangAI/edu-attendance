@@ -9,7 +9,7 @@
   const hz = n => 440 * Math.pow(2, (n - 69) / 12);
   const rnd = seed => () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
   const STYLES = ['pop', 'epic', 'calm', 'dream', 'waltz'];
-  const OF_THEME = { card: 'pop', apartment: 'pop', led: 'pop', train: 'pop', memo: 'calm', chalk: 'calm', forest: 'waltz', garden: 'waltz', star: 'dream', ocean: 'dream', lantern: 'dream', plaque: 'epic' };
+  const OF_THEME = { card: 'pop', apartment: 'pop', led: 'pop', train: 'pop', memo: 'calm', chalk: 'calm', forest: 'calm', garden: 'pop', star: 'dream', ocean: 'dream', lantern: 'dream', plaque: 'epic' };
   const styleOf = th => STYLES.includes(th) ? th : (OF_THEME[th] || 'pop');
 
   function Engine(ctx, out) {
@@ -352,8 +352,23 @@
     };
   }
 
+  /* ---------------- 배경음악 음원(assets/music) ----------------
+     분위기마다 곡 목록을 섞어 한 곡씩 이어 틀고, 같은 곡을 연달아 반복하지 않는다.
+     그 분위기 곡이 다 끝나면 비슷한 분위기 곡으로 넘어간다. 음원을 못 불러오면 합성 음악으로 대신한다 */
+  const MUSIC = {
+    pop: ['pop_beautiful_korea', 'pop_colors_of_life', 'pop_game', 'pop_morning_kiss'],
+    calm: ['calm_how_are_you'],
+    epic: ['epic_city_key', 'epic_chuncheon_autumn'],
+    dream: ['dream_green_apple']
+  };
+  const NEXT = { pop: ['pop', 'calm'], calm: ['calm', 'dream', 'pop'], dream: ['dream', 'calm', 'epic'], epic: ['epic', 'dream', 'pop'] };
+  const fileStyle = th => { const st = styleOf(th); return st === 'waltz' ? 'calm' : st; };
+  const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const MUSIC_BASE = (() => { try { const s = document.currentScript && document.currentScript.src; return s ? s.replace(/sound\.js.*$/, 'music/') : 'assets/music/'; } catch (e) { return 'assets/music/'; } })();
+
   /* ---------------- 실제 재생(브라우저) ---------------- */
   const Sound = {
+    MUSIC, NEXT,
     Engine, STYLES, OF_THEME, styleOf, mode: 'both', ctx: null, eng: null, theme: 'pop', unlocked: false, user: { bgm: true, sfx: true, vol: 0.55, on: false },
     load() { try { const o = JSON.parse(localStorage.getItem('snd') || '{}'); this.user = { bgm: o.bgm !== false, sfx: o.sfx !== false, vol: o.vol == null ? 0.55 : o.vol, on: !!o.on }; } catch (e) {} },
     save() { try { localStorage.setItem('snd', JSON.stringify(this.user)); } catch (e) {} },
@@ -379,13 +394,43 @@
     },
     // 화면 테마 또는 분위기(pop/epic/calm/dream/waltz)를 받는다
     setTheme(th) { if (this.theme === th) return; this.theme = th; if (this.eng) this.eng.theme = th; this.stopBgm(); this.refresh(); },
+    _playlist() {
+      const out = []; NEXT[fileStyle(this.theme)].forEach(g2 => shuffle(MUSIC[g2]).forEach(n => { if (!out.includes(n)) out.push(n); }));
+      if (out.length > 1 && out[0] === this._last) out.push(out.shift());   // 방금 끝난 곡이 바로 다시 나오지 않게
+      return out;
+    },
+    _playNext() {
+      if (!this._playing) return;
+      if (!this._queue || !this._queue.length) this._queue = this._playlist();
+      const name = this._queue.shift(); this._last = name;
+      if (!this._audio) {
+        const a = new Audio(); a.preload = 'auto'; this._audio = a;
+        const src = this.ctx.createMediaElementSource(a), fg = this.ctx.createGain(); fg.gain.value = 0.6; src.connect(fg); fg.connect(this.eng.bgm);
+        a.addEventListener('ended', () => { clearTimeout(this._gap); this._gap = setTimeout(() => this._playNext(), 1200); });   // 곡 사이 1초 쉼
+        a.addEventListener('error', () => {
+          this._fails = (this._fails || 0) + 1;
+          if (this._fails >= 3) { this._useFiles = false; this._playing = false; this.startBgm(); }   // 음원을 못 쓰면 합성 음악으로
+          else { clearTimeout(this._gap); this._gap = setTimeout(() => this._playNext(), 400); }
+        });
+      }
+      this._audio.src = MUSIC_BASE + name + '.mp3';
+      const pr = this._audio.play(); if (pr && pr.then) pr.then(() => { this._fails = 0; }).catch(() => {});
+    },
+    nowPlaying() { return this._playing ? this._last : null; },
     startBgm() {
-      if (this._timer || !this.ctx) return;
+      if (!this.ctx) return;
+      if (this._useFiles !== false && typeof Audio !== 'undefined') {
+        if (this._playing) return;
+        const e = this.eng, c = this.ctx; this._playing = true; this._queue = this._playlist();
+        e.bgm.gain.cancelScheduledValues(c.currentTime); e.bgm.gain.setValueAtTime(0.0001, c.currentTime); e.bgm.gain.linearRampToValueAtTime(0.55 * this.user.vol, c.currentTime + 2);
+        this._playNext(); return;
+      }
+      if (this._timer) return;
       const e = this.eng, c = this.ctx; this._bar = 0; this._next = c.currentTime + 0.2;
       e.bgm.gain.cancelScheduledValues(c.currentTime); e.bgm.gain.setValueAtTime(0.0001, c.currentTime); e.bgm.gain.linearRampToValueAtTime(0.55 * this.user.vol, c.currentTime + 2);
       this._timer = setInterval(() => { while (this._next < c.currentTime + 4) { e.bar(this.theme, this._bar++, this._next); this._next += e.barLen(this.theme); } }, 1000);
     },
-    stopBgm() { clearInterval(this._timer); this._timer = 0; if (this.ctx && this.eng) { const g2 = this.eng.bgm.gain, n = this.ctx.currentTime; g2.cancelScheduledValues(n); g2.setTargetAtTime(0.0001, n, 0.2); } },
+    stopBgm() { clearInterval(this._timer); this._timer = 0; clearTimeout(this._gap); if (this._playing) { this._playing = false; if (this._audio) this._audio.pause(); } if (this.ctx && this.eng) { const g2 = this.eng.bgm.gain, n = this.ctx.currentTime; g2.cancelScheduledValues(n); g2.setTargetAtTime(0.0001, n, 0.2); } },
     refresh() { if (this.unlocked && this.bgmOn()) this.startBgm(); else this.stopBgm(); this.ui(); },
     sfx(kind, o) {
       try { if (g.__sfxLog) g.__sfxLog.push({ t: performance.timeOrigin + performance.now(), kind, o: o || {} }); } catch (e) {}
