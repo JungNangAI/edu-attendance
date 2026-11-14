@@ -87,3 +87,5 @@ textarea{min-height:110px;resize:vertical}
 .btn.primary.big:hover,#next:hover,.btn.cta:hover{transform:translateY(-1px);box-shadow:0 6px 0 color-mix(in srgb,var(--accent) 60%,#000),0 10px 22px color-mix(in srgb,var(--accent) 30%,transparent)}
 .btn.primary.big:active,#next:active,.btn.cta:active{transform:translateY(4px);box-shadow:0 1px 0 color-mix(in srgb,var(--accent) 60%,#000)}
 .btn.primary.big:disabled{box-shadow:none;transform:none}
+
+.app-modal-col{flex-direction:column;align-items:stretch}.app-modal-col .btn{width:100%}

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
-<link rel="stylesheet" href="assets/common.css?v=20261115">
+<link rel="stylesheet" href="assets/common.css?v=20261115b">
 <style>
 .hero{background:radial-gradient(circle at 85% 20%,#fff3b0 0,transparent 42%),linear-gradient(160deg,#ffe066 0%,#ffd43b 60%,#ffc928 100%);color:var(--ink);padding:30px 16px 74px;position:relative;overflow:hidden}
 .hero .wrap{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:24px}
@@ -73,13 +73,13 @@
   <section class="card mine">
     <h2>이 브라우저에서 만든 행사</h2>
     <div id="list"></div>
-    <p class="hint">관리 링크는 이 브라우저에만 저장돼요. 다른 PC에서 쓰려면 행사를 만들 때 받은 관리 링크를 열어 주세요. 행사(명단·출석 기록)는 마지막으로 쓴 날부터 고른 보관 기간(기본 10일)이 지나면 자동으로 지워져요. 출석부 엑셀은 미리 받아 두세요. 지워진 뒤에도 받아 둔 엑셀을 명단으로 올리면 이어서 쓸 수 있어요.</p>
+    <p class="hint">관리 링크는 이 브라우저에만 저장돼요. 다른 PC에서 쓰려면 행사를 만들 때 받은 관리 링크를 열어 주세요. 행사(명단·출석 기록)는 마지막으로 쓴 날부터 고른 보관 기간(기본 10일)이 지나면 자동으로 지워져요. 교육이 끝나면 <b>[끝났어요 · 정리]</b>로 바로 지울 수 있어요. 출석부 엑셀은 미리 받아 두세요. 지워진 뒤에도 받아 둔 엑셀을 명단으로 올리면 이어서 쓸 수 있어요.</p>
   </section>
 </div></div>
 <footer class="foot"><img src="assets/defaults/jungnang_slogan.png" alt="나의 자랑 우리 중랑">중랑AI혁신팀</footer>
 <script src="config.js"></script>
 <script src="assets/qrcode.js?v=20261115"></script>
-<script src="assets/common.js?v=20261115"></script>
+<script src="assets/common.js?v=20261115b"></script>
 <script>
 (function(){
   const A = window.App, $ = id => document.getElementById(id);
@@ -89,14 +89,24 @@
   function render(){
     const list = A.myEvents();
     $('list').innerHTML = list.length ? list.map(e => { const L = A.links(e.id, e.token); return `<div class="ev"><div class="t"><b>${A.esc(e.title || '(이름 없음)')}</b><span>${new Date(e.at).toLocaleDateString('ko-KR')} 만듦/저장</span></div>
-      <div class="row"><a class="btn primary" href="${L.screenAdmin}" target="_blank" rel="noopener">강의실 화면</a><a class="btn ghost" href="${L.admin}">설정·링크</a><button type="button" class="btn ghost" data-phone="${e.id}">📱 휴대폰</button><button type="button" class="btn ghost quiet" data-forget="${e.id}">숨기기</button></div></div>`; }).join('')
+      <div class="row"><a class="btn primary" href="${L.screenAdmin}" target="_blank" rel="noopener">강의실 화면</a><a class="btn ghost" href="${L.admin}">설정·링크</a><button type="button" class="btn ghost" data-phone="${e.id}">📱 휴대폰</button><button type="button" class="btn ghost quiet" data-forget="${e.id}">끝났어요 · 정리</button></div></div>`; }).join('')
       : '<div class="empty"><img class="mascot" src="assets/defaults/geuljuim_main.png" alt=""><span>아직 만든 행사가 없어요.<br>위의 [새 행사 만들기]로 시작해 보세요.</span></div>';
   }
   $('list').addEventListener('click', async e => {
     const ph = e.target.closest('[data-phone]');
     if (ph) { const ev = A.myEvents().find(x => x.id === ph.dataset.phone); if (ev) A.phoneOpen(ev.id, ev.token); return; }
     const id = e.target.dataset.forget; if (!id) return;
-    if (await A.dialog({ title: '이 PC 목록에서 숨기기', message: '이 브라우저 목록에서만 숨겨요. 행사와 출석 기록은 저장소에 그대로 남아요.\n저장소에서 지우려면 [설정·링크] → 마지막 단계 맨 아래 [행사 삭제]를 쓰세요.\n관리 링크를 따로 적어 두지 않았다면 숨긴 뒤에는 다시 열 수 없어요.', ok: '숨기기' })) { A.forgetEvent(id); render(); }
+    const ev = A.myEvents().find(x => x.id === id); if (!ev) return;
+    const L = A.links(ev.id, ev.token);
+    const c = await A.choose({ title: `'${ev.title || '이 행사'}' 정리하기`,
+      html: `<p>교육·행사가 끝났다면 <b>행사 삭제</b>를 눌러 주세요. 명단·출석 기록·연락처가 저장소에서 바로 지워지고 되돌릴 수 없어요.</p><p class="pq-warn">지우기 전에 <a href="${L.screenAdmin}" target="_blank" rel="noopener">강의실 화면</a>에서 <b>[엑셀 받기]</b>로 출석부를 받아 두세요.</p>`,
+      choices: [{ v: 'del', label: '행사 삭제 (저장소에서 지우기)', kind: 'danger' }, { v: 'hide', label: '이 PC 목록에서만 숨기기' }] });
+    if (c === 'hide') { A.forgetEvent(id); render(); A.toast('목록에서 숨겼어요. 행사는 저장소에 그대로 있어요.'); }
+    if (c === 'del') {
+      if (!await A.dialog({ title: '정말 지울까요?', message: `'${ev.title || '이 행사'}' 행사와 모든 출석 기록을 지웁니다.\n되돌릴 수 없어요.`, ok: '삭제', danger: true })) return;
+      try { await A.rpc('delete_event', { p_id: ev.id, p_token: ev.token }); A.forgetEvent(id); render(); A.toast('행사를 지웠어요', 'ok'); }
+      catch (er) { if (/찾을 수 없/.test(er.message)) { A.forgetEvent(id); render(); A.toast('이미 지워진 행사라 목록에서 뺐어요'); } else A.toast(er.message, 'bad'); }
+    }
   });
   render();
 })();

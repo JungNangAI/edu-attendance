@@ -244,6 +244,19 @@
       if (timeout) setTimeout(() => { if (wrap.isConnected) done(false); }, timeout);
     });
   }
+  // 버튼 여러 개 중 하나 고르기 → 고른 값(없으면 null)
+  function choose({ title, message = '', html = '', choices = [] }) {
+    return new Promise(resolve => {
+      const wrap = document.createElement('div'); wrap.className = 'app-modal';
+      wrap.innerHTML = `<div class="app-modal-box" role="dialog" aria-modal="true" aria-labelledby="amt"><h2 id="amt">${esc(title)}</h2>${message ? `<p>${esc(message).replace(/\n/g, '<br>')}</p>` : ''}${html}
+        <div class="app-modal-btns app-modal-col">${choices.map(c => `<button type="button" class="btn ${c.kind || 'ghost'}" data-c="${esc(c.v)}">${esc(c.label)}</button>`).join('')}<button type="button" class="btn ghost" data-c="">취소</button></div></div>`;
+      document.body.appendChild(wrap);
+      const done = v => { wrap.classList.add('out'); setTimeout(() => wrap.remove(), 180); resolve(v || null); };
+      wrap.addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (b) done(b.dataset.c); else if (e.target === wrap) done(null); });
+      wrap.addEventListener('keydown', e => { if (e.key === 'Escape') done(null); });
+      requestAnimationFrame(() => { wrap.classList.add('in'); wrap.querySelector('[data-c]').focus(); });
+    });
+  }
   // 관리 화면을 담당자 휴대폰으로: 휴대폰 카메라로 찍으면 바로 열린다(주소 복사·카톡 옮기기 없이)
   function phoneOpen(id, tk) {
     const url = links(id, tk).screenPhone;
@@ -278,6 +291,6 @@
     CFG, ready: !!(CFG.supabaseUrl && CFG.supabaseKey), DEFAULT_CONFIG, DEFAULT_SURVEY, THEMES, PALETTES, withDefaults, merge,
     rpc, RpcError, noFn, query, hashParam, links, siteBase, takeToken, deviceId, myEvents, rememberEvent, forgetEvent,
     esc, josa, hhmm, ymd, shortDate, applyColors, contrast, mix, lum,
-    loadImage, shrinkImage, fetchAsDataUrl, loadAssets, qrCanvas, qrSvg, download, toast, dialog, phoneOpen, confetti
+    loadImage, shrinkImage, fetchAsDataUrl, loadAssets, qrCanvas, qrSvg, download, toast, dialog, choose, phoneOpen, confetti
   };
 })();
