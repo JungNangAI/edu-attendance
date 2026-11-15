@@ -1,7 +1,7 @@
 -- =====================================================================
 -- QR 출석 + 위촉장 시스템 : 이미 쓰던 저장소 업데이트 SQL
 -- 사용법: Supabase 대시보드 → SQL Editor → New query → 이 파일 전체를 붙여 넣기 → Run
--- 기존 행사·출석 기록·행사 만들기 비밀번호는 그대로입니다. 여러 번 실행해도 됩니다.
+-- 기존 행사·출석 기록은 그대로입니다. 여러 번 실행해도 됩니다. (행사 만들기 비밀번호는 이 버전부터 쓰지 않습니다.)
 -- =====================================================================
 
 create schema if not exists extensions;
@@ -266,9 +266,10 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare pw text; tok text; new_id uuid; sid uuid; r jsonb;
 begin
   perform _purge();
-  select value into pw from app_settings where key = 'create_password';
-  if pw is null or p_password is null or crypt(p_password, pw) <> pw then
-    raise exception '행사 만들기 비밀번호가 맞지 않습니다';
+  -- 행사 만들기 비밀번호는 없앴다(p_password는 예전 화면과 맞추려고 남겨 둠, 쓰지 않음).
+  -- 대신 함부로 많이 만들지 못하게: 한 시간에 행사 30개까지.
+  if (select count(*) from events where created_at > now() - interval '1 hour') >= 30 then
+    raise exception '지금은 행사를 너무 많이 만들고 있어요. 잠시 뒤 다시 해 주세요';
   end if;
   r := _clean_roster(coalesce(p_roster, '[]'::jsonb));
   if jsonb_array_length(r) = 0 and coalesce(p_config->'attend'->>'walkin', '') <> 'true' then raise exception '명단이 비어 있습니다'; end if;

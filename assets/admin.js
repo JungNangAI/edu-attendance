@@ -479,7 +479,7 @@
   $('createBtn').onclick = async () => {
     const p = problems();
     if (p.length) { $('createErr').textContent = p.map(x => `${x[0]}단계: ${x[1]}`).join(' / '); return; }
-    const pw = $('pw').value; if (!pw) { $('createErr').textContent = '비밀번호를 넣어 주세요.'; $('pw').focus(); return; }
+    const pw = $('pwField').hidden ? '' : $('pw').value;
     const btn = $('createBtn'); btn.disabled = true; btn.textContent = '만드는 중…'; $('createErr').textContent = '';
     try {
       const r = created || await A.rpc('create_event', { p_password: pw, p_config: state.config, p_roster: state.roster });
@@ -491,7 +491,10 @@
       await importHistory(r.id, r.token);
       changed = false;
       showDone(r.id, r.token);
-    } catch (e) { $('createErr').textContent = e.message; btn.disabled = false; btn.textContent = created ? '이미지 다시 올리기' : '행사 만들기'; }
+    } catch (e) {
+      // 저장소(SQL)가 아직 예전 버전이면 비밀번호를 묻는다
+      if (!created && /비밀번호/.test(e.message || '')) { $('pwField').hidden = false; $('pw').focus(); }
+      $('createErr').textContent = e.message; btn.disabled = false; btn.textContent = created ? '이미지 다시 올리기' : '행사 만들기'; }
   };
   function showDone(id, tk) {
     $('createBox').hidden = true; $('navBtns').hidden = true; document.querySelector('.steps').hidden = true;
