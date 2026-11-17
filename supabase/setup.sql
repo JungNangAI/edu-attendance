@@ -452,7 +452,7 @@ begin
   if e.id is null then return null; end if;
   select * into s from sessions where id = e.current_session;
   return jsonb_build_object(
-    'session', jsonb_build_object('id', s.id, 'label', s.label, 'started_at', s.started_at, 'mode', s.mode),
+    'session', jsonb_build_object('id', s.id, 'label', s.label, 'started_at', s.started_at, 'mode', s.mode, 'poll_id', s.poll_id),
     'updated_at', e.updated_at,
     'list', coalesce((select jsonb_agg(jsonb_build_object('no', a.person_no, 'at', a.at)
                         || coalesce((select jsonb_build_object('dept', x.dept, 'name', x.name) from extras x
@@ -580,7 +580,7 @@ create or replace function set_mode(p_id uuid, p_token text, p_mode text) return
 language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform _admin(p_id, p_token);
-  if p_mode not in ('in', 'out', 'survey') then raise exception '잘못된 값'; end if;
+  if p_mode not in ('in', 'out', 'survey', 'qna', 'poll') then raise exception '잘못된 값'; end if;
   update sessions set mode = p_mode where id = (select current_session from events where id = p_id);
   perform _touch(p_id);
   return get_board(p_id);
@@ -688,7 +688,7 @@ begin
   select * into e from events where id = p_id and expires_at >= now();
   if e.id is null then return null; end if;
   select * into s from sessions where id = e.current_session;
-  select md5(concat_ws('|', s.id, s.label, s.mode, e.updated_at, count(a.at), max(a.at), count(a.out_at), max(a.out_at),
+  select md5(concat_ws('|', s.id, s.label, s.mode, s.poll_id, e.updated_at, count(a.at), max(a.at), count(a.out_at), max(a.out_at),
                        (select count(*) from responses r where r.session_id = s.id)))
     into v from attendance a where a.session_id = s.id;
   if p_ver is not null and p_ver = v then return jsonb_build_object('same', true, 'v', v); end if;
@@ -768,6 +768,291 @@ exception when others then
   raise notice '자동 삭제 예약 실패(앱은 정상 동작): %', sqlerrm;
 end $$;
 
+-- =====================================================================
+-- 질문 받기(참석자 → 강사) · 질문 던지기(강사 → 참석자, 워드클라우드)  (나중에 추가된 것. 다시 실행해도 된다)
+-- 설정: config.qna = {on, anon, moderate}, config.poll = {on, anon, max, questions:[..]}
+-- 익명이면 이름(person_no)을 저장하지 않고, rkey는 출석 기록(device)과 이어지지 않는 값이다.
+-- =====================================================================
+create table if not exists questions (
+  id         bigserial primary key,
+  event_id   uuid not null references events(id) on delete cascade,
+  session_id uuid not null references sessions(id) on delete cascade,
+  person_no  int,
+  rkey       text not null,
+  body       text not null,
+  likes      int  not null default 0,
+  status     text not null default 'show',        -- wait 띄우기 전 / show 화면에 / done 답변 완료 / hide 숨김
+  created_at timestamptz not null default now()
+);
+create index if not exists questions_session on questions(session_id);
+create index if not exists questions_event on questions(event_id);
+create table if not exists question_likes (
+  question_id bigint not null references questions(id) on delete cascade,
+  rkey        text   not null,
+  primary key (question_id, rkey)
+);
+create table if not exists polls (
+  id         bigserial primary key,
+  event_id   uuid not null references events(id) on delete cascade,
+  session_id uuid not null references sessions(id) on delete cascade,
+  q          text not null,
+  is_open    boolean not null default true,
+  anon       boolean not null default true,
+  max_words  int not null default 3,
+  hidden     jsonb not null default '[]'::jsonb,   -- 담당자가 숨긴 낱말
+  created_at timestamptz not null default now()
+);
+create index if not exists polls_event on polls(event_id);
+create table if not exists poll_answers (
+  id         bigserial primary key,
+  poll_id    bigint not null references polls(id) on delete cascade,
+  event_id   uuid not null references events(id) on delete cascade,
+  person_no  int,
+  rkey       text not null,
+  words      jsonb not null,
+  created_at timestamptz not null default now(),
+  unique (poll_id, rkey)
+);
+create index if not exists poll_answers_poll on poll_answers(poll_id);
+alter table sessions add column if not exists poll_id bigint;   -- 지금 강의실 화면에 띄운 질문(워드클라우드)
+
+alter table questions      enable row level security;
+alter table question_likes enable row level security;
+alter table polls          enable row level security;
+alter table poll_answers   enable row level security;
+revoke all on questions, question_likes, polls, poll_answers from public;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    execute 'revoke all on questions, question_likes, polls, poll_answers from anon';
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    execute 'revoke all on questions, question_likes, polls, poll_answers from authenticated';
+  end if;
+end $$;
+
+-- 화면에 띄우기 곤란한 말(욕설 등)이 들어 있는지
+create or replace function _bad(t text) returns boolean
+language sql immutable as $$
+  select regexp_replace(lower(coalesce(t, '')), '[^가-힣a-z0-9]', '', 'g')
+         ~ '(씨발|시발|ㅅㅂ|씨바|시바알|병신|ㅂㅅ|븅신|개새|개색|좆|존나|졸라|지랄|ㅈㄹ|꺼져|닥쳐|미친놈|미친년|니미|느금|썅|엿먹|fuck|shit)';
+$$;
+-- 글 속 전화번호·주민번호 같은 숫자는 가린다
+create or replace function _mask_nums(t text) returns text
+language sql immutable as $$
+  select regexp_replace(regexp_replace(coalesce(t, ''),
+           '\d{6}\s*-\s*[1-4]\d{6}', '******-*******', 'g'),
+           '(01[016789]|0\d{1,2})[\s.-]?\d{3,4}[\s.-]?\d{4}', '***-****-****', 'g');
+$$;
+-- 워드클라우드 낱말 다듬기: 공백·문장부호 정리, 영어는 소문자, 3글자 이상이면 끝의 '은·는·을·를'만 뗀다
+create or replace function _word(t text) returns text
+language sql immutable as $$
+  with a as (select upper(trim(regexp_replace(regexp_replace(coalesce(t, ''), '[^가-힣ㄱ-ㅎa-zA-Z0-9 ·+#&-]', '', 'g'), '\s+', ' ', 'g'))) as w)
+  select case when char_length(w) >= 3 and w ~ '[가-힣](은|는|을|를)$' then left(w, char_length(w) - 1) else w end from a;
+$$;
+-- 이 휴대폰의 이번 행사용 익명 표 (출석 기록의 device 해시와 이어지지 않는다)
+create or replace function _qkey(p_device text, p_kind text, p_id uuid) returns text
+language sql immutable set search_path = public, extensions as $$
+  select case when p_device is null or length(p_device) < 16 or length(p_device) > 200 then null
+              else encode(digest(p_device || '|' || p_kind || '|' || p_id::text, 'sha256'), 'hex') end;
+$$;
+-- 이번 회차에 이 휴대폰으로 출석한 사람 번호(없으면 null)
+create or replace function _my_no(e events, p_device text) returns int
+language sql stable security definer set search_path = public, extensions as $$
+  select a.person_no from attendance a
+   where a.session_id = e.current_session and (a.device = _dev(p_device) or a.out_device = _dev(p_device))
+   order by a.at nulls last limit 1;
+$$;
+
+-- ---------- 질문 받기 ----------
+create or replace function ask_question(p_id uuid, p_device text, p_body text, p_named boolean) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; k text; b text; me int; named boolean; st text;
+begin
+  select * into e from events where id = p_id and expires_at >= now();
+  if e.id is null then return jsonb_build_object('status', 'error', 'message', '행사를 찾을 수 없습니다'); end if;
+  if coalesce(e.config->'qna'->>'on', '') <> 'true' then return jsonb_build_object('status', 'error', 'message', '질문을 받지 않는 행사예요'); end if;
+  k := _qkey(p_device, 'qna', e.id);
+  if k is null then return jsonb_build_object('status', 'error', 'message', '화면을 새로고침한 뒤 다시 해 주세요'); end if;
+  b := _clean_text(p_body, 200);
+  if char_length(b) < 2 then return jsonb_build_object('status', 'error', 'message', '질문을 두 글자 이상 써 주세요'); end if;
+  if (select count(*) from questions where event_id = e.id and rkey = k and created_at > now() - interval '1 minute') >= 3 then
+    return jsonb_build_object('status', 'error', 'message', '잠시 뒤에 다시 보내 주세요(1분에 3개까지)');
+  end if;
+  if (select count(*) from questions where session_id = e.current_session) >= 300 then
+    return jsonb_build_object('status', 'error', 'message', '이번 회차 질문이 너무 많아요. 담당자에게 말씀해 주세요');
+  end if;
+  -- 익명 허용이 꺼져 있으면 언제나 실명, 켜져 있으면 고른 대로(p_named)
+  named := coalesce(e.config->'qna'->>'anon', 'true') = 'false' or coalesce(p_named, false);
+  if named then
+    me := _my_no(e, p_device);
+    if me is null then return jsonb_build_object('status', 'error', 'code', 'notin', 'message', '이름이 함께 나가는 질문이라, 이 휴대폰으로 먼저 출석해 주세요'); end if;
+  end if;
+  st := case when _bad(b) then 'hide' when coalesce(e.config->'qna'->>'moderate', '') = 'true' then 'wait' else 'show' end;
+  insert into questions(event_id, session_id, person_no, rkey, body, status)
+    values (e.id, e.current_session, case when named then me else null end, k, _mask_nums(b), st);
+  perform _touch(e.id);
+  return jsonb_build_object('status', 'ok', 'wait', st <> 'show');
+end $$;
+
+create or replace function like_question(p_id uuid, p_device text, p_qid bigint) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare k text; n int;
+begin
+  k := _qkey(p_device, 'qna', p_id);
+  if k is null then return jsonb_build_object('status', 'error', 'message', '화면을 새로고침한 뒤 다시 해 주세요'); end if;
+  if not exists (select 1 from questions q join events e on e.id = q.event_id
+                  where q.id = p_qid and q.event_id = p_id and q.session_id = e.current_session and q.status in ('show', 'done')) then
+    return jsonb_build_object('status', 'error', 'message', '없는 질문이에요');
+  end if;
+  insert into question_likes(question_id, rkey) values (p_qid, k) on conflict do nothing;
+  get diagnostics n = row_count;
+  if n > 0 then update questions set likes = likes + 1 where id = p_qid; end if;
+  return jsonb_build_object('status', case when n > 0 then 'ok' else 'dup' end);
+end $$;
+
+-- 질문 목록: 누구나(휴대폰·강의실 화면)는 띄운 질문만, 관리 열쇠가 있으면 모두
+create or replace function get_questions(p_id uuid, p_device text, p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; adm boolean := false; k text;
+begin
+  select * into e from events where id = p_id and expires_at >= now();
+  if e.id is null then return null; end if;
+  if p_token is not null then adm := check_admin(p_id, p_token); end if;
+  k := _qkey(p_device, 'qna', e.id);
+  return jsonb_build_object(
+    'on', coalesce(e.config->'qna'->>'on', '') = 'true',
+    'mode', (select mode from sessions where id = e.current_session),
+    'list', coalesce((select jsonb_agg(jsonb_build_object(
+              'id', q.id, 'body', q.body, 'likes', q.likes, 'status', q.status, 'at', q.created_at,
+              'who', case when q.person_no is null then null
+                          else (select jsonb_build_object('dept', p->>'dept', 'name', p->>'name') from _person(e, q.person_no) p) end,
+              'mine', k is not null and q.rkey = k,
+              'liked', k is not null and exists (select 1 from question_likes l where l.question_id = q.id and l.rkey = k))
+              order by (q.status = 'done'), q.likes desc, q.created_at)
+            from questions q
+           where q.session_id = e.current_session
+             and (adm or q.status in ('show', 'done') or (k is not null and q.rkey = k and q.status = 'wait'))), '[]'::jsonb));
+end $$;
+
+create or replace function set_question(p_id uuid, p_token text, p_qid bigint, p_status text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform _admin(p_id, p_token);
+  if p_status not in ('wait', 'show', 'done', 'hide') then raise exception '잘못된 값'; end if;
+  update questions set status = p_status where id = p_qid and event_id = p_id;
+  return get_questions(p_id, null, p_token);
+end $$;
+
+-- ---------- 질문 던지기(워드클라우드) ----------
+create or replace function _poll_json(p polls, p_hidden boolean) returns jsonb
+language sql stable security definer set search_path = public, extensions as $$
+  select jsonb_build_object('id', p.id, 'q', p.q, 'open', p.is_open, 'anon', p.anon, 'max', p.max_words, 'hidden', p.hidden,
+    'n', (select count(*) from poll_answers a where a.poll_id = p.id),
+    'words', coalesce((select jsonb_agg(jsonb_build_array(w, c) order by c desc, w) from (
+        select x #>> '{}' as w, count(*) as c from poll_answers a, jsonb_array_elements(a.words) x
+         where a.poll_id = p.id and (p_hidden or not (p.hidden ? (x #>> '{}')))
+         group by 1 order by 2 desc, 1 limit 200) t), '[]'::jsonb));
+$$;
+
+create or replace function start_poll(p_id uuid, p_token text, p_q text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; q text; pid bigint; mx int;
+begin
+  e := _admin(p_id, p_token);
+  q := _clean_text(p_q, 120);
+  if q = '' then raise exception '질문을 써 주세요'; end if;
+  mx := greatest(1, least(5, coalesce(nullif(e.config->'poll'->>'max', '')::int, 3)));
+  update polls set is_open = false where session_id = e.current_session and is_open;
+  insert into polls(event_id, session_id, q, anon, max_words)
+    values (p_id, e.current_session, q, coalesce(e.config->'poll'->>'anon', 'true') <> 'false', mx) returning id into pid;
+  update sessions set poll_id = pid, mode = 'poll' where id = e.current_session;
+  perform _touch(p_id);
+  return get_board(p_id);
+end $$;
+
+-- p_open: true 다시 받기 / false 그만 받기 (워드클라우드는 그대로 보인다)
+create or replace function open_poll(p_id uuid, p_token text, p_poll bigint, p_open boolean) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare p polls;
+begin
+  perform _admin(p_id, p_token);
+  update polls set is_open = p_open where id = p_poll and event_id = p_id returning * into p;
+  if p.id is null then raise exception '없는 질문이에요'; end if;
+  return _poll_json(p, true);
+end $$;
+
+create or replace function hide_word(p_id uuid, p_token text, p_poll bigint, p_word text, p_hide boolean) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare p polls;
+begin
+  perform _admin(p_id, p_token);
+  update polls set hidden = case when p_hide then (select coalesce(jsonb_agg(distinct x), '[]'::jsonb) from jsonb_array_elements(hidden || to_jsonb(p_word)) x)
+                                 else (select coalesce(jsonb_agg(x), '[]'::jsonb) from jsonb_array_elements(hidden) x where x #>> '{}' <> p_word) end
+   where id = p_poll and event_id = p_id returning * into p;
+  if p.id is null then raise exception '없는 질문이에요'; end if;
+  return _poll_json(p, true);
+end $$;
+
+-- 강의실 화면·휴대폰이 몇 초마다 묻는다. p_poll이 없으면 지금 띄운 질문
+create or replace function get_poll(p_id uuid, p_poll bigint, p_device text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; p polls; k text;
+begin
+  select * into e from events where id = p_id and expires_at >= now();
+  if e.id is null then return null; end if;
+  select * into p from polls where event_id = p_id
+     and id = coalesce(p_poll, (select poll_id from sessions where id = e.current_session));
+  if p.id is null then return jsonb_build_object('mode', (select mode from sessions where id = e.current_session), 'poll', null); end if;
+  k := _qkey(p_device, 'poll', e.id);
+  return jsonb_build_object('mode', (select mode from sessions where id = e.current_session), 'poll', _poll_json(p, false),
+                            'answered', k is not null and exists (select 1 from poll_answers a where a.poll_id = p.id and a.rkey = k));
+end $$;
+
+create or replace function answer_poll(p_id uuid, p_device text, p_poll bigint, p_words jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; p polls; k text; ws jsonb; me int;
+begin
+  select * into e from events where id = p_id and expires_at >= now();
+  if e.id is null then return jsonb_build_object('status', 'error', 'message', '행사를 찾을 수 없습니다'); end if;
+  select * into p from polls where id = p_poll and event_id = p_id;
+  if p.id is null then return jsonb_build_object('status', 'error', 'message', '없는 질문이에요'); end if;
+  if not p.is_open then return jsonb_build_object('status', 'error', 'code', 'closed', 'message', '답을 그만 받았어요'); end if;
+  k := _qkey(p_device, 'poll', e.id);
+  if k is null then return jsonb_build_object('status', 'error', 'message', '화면을 새로고침한 뒤 다시 해 주세요'); end if;
+  if exists (select 1 from poll_answers where poll_id = p.id and rkey = k) then return jsonb_build_object('status', 'dup'); end if;
+  if (select count(*) from poll_answers where poll_id = p.id) >= 1000 then return jsonb_build_object('status', 'error', 'message', '답이 너무 많아요(1,000명까지)'); end if;
+  if jsonb_typeof(p_words) <> 'array' then return jsonb_build_object('status', 'error', 'message', '낱말을 써 주세요'); end if;
+  select coalesce(jsonb_agg(distinct w), '[]'::jsonb) into ws from (
+    select left(_word(x #>> '{}'), 15) as w from jsonb_array_elements(p_words) x
+     where jsonb_typeof(x) = 'string' limit p.max_words) t
+   where w <> '' and not _bad(w);
+  if jsonb_array_length(ws) = 0 then return jsonb_build_object('status', 'error', 'message', '낱말을 써 주세요'); end if;
+  if not p.anon then
+    me := _my_no(e, p_device);
+    if me is null then return jsonb_build_object('status', 'error', 'code', 'notin', 'message', '이번 회차에 이 휴대폰으로 출석한 사람만 답할 수 있어요'); end if;
+  end if;
+  insert into poll_answers(poll_id, event_id, person_no, rkey, words) values (p.id, e.id, me, k, ws) on conflict do nothing;
+  perform _touch(e.id);
+  return jsonb_build_object('status', 'ok');
+end $$;
+
+-- 엑셀용: 이 행사의 질문·던진 질문과 답 모두 (관리 열쇠)
+create or replace function export_talk(p_id uuid, p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events;
+begin
+  e := _admin(p_id, p_token);
+  return jsonb_build_object(
+    'questions', coalesce((select jsonb_agg(jsonb_build_object('session_id', q.session_id, 'no', q.person_no, 'body', q.body,
+                    'likes', q.likes, 'status', q.status, 'at', q.created_at) order by q.created_at)
+                  from questions q where q.event_id = p_id), '[]'::jsonb),
+    'polls', coalesce((select jsonb_agg(jsonb_build_object('session_id', p.session_id, 'q', p.q, 'at', p.created_at, 'anon', p.anon,
+                    'summary', _poll_json(p, true),
+                    'answers', coalesce((select jsonb_agg(jsonb_build_object('no', a.person_no, 'words', a.words, 'at', a.created_at) order by a.created_at)
+                                         from poll_answers a where a.poll_id = p.id), '[]'::jsonb)) order by p.created_at)
+              from polls p where p.event_id = p_id), '[]'::jsonb));
+end $$;
+
 -- ---------- 함수 실행 권한 ----------
 revoke execute on all functions in schema public from public;
 do $$
@@ -781,7 +1066,11 @@ begin
     'set_mode(uuid,text,text)', 'get_phones(uuid,text)',
     'join_enter(uuid,text,text)', 'submit_attendance2(uuid,int,text,text,text,text)', 'undo_my_attendance(uuid,text)',
     'admin_mark(uuid,text,int,text)', 'admin_add(uuid,text,text,text)', 'get_qr(uuid,text)',
-    'get_board2(uuid,text)', 'extend_keep(uuid,text)', 'import_history(uuid,text,jsonb)', 'submit_survey(uuid,text,jsonb)']
+    'get_board2(uuid,text)', 'extend_keep(uuid,text)', 'import_history(uuid,text,jsonb)', 'submit_survey(uuid,text,jsonb)',
+    'ask_question(uuid,text,text,boolean)', 'like_question(uuid,text,bigint)', 'get_questions(uuid,text,text)',
+    'set_question(uuid,text,bigint,text)', 'start_poll(uuid,text,text)', 'open_poll(uuid,text,bigint,boolean)',
+    'hide_word(uuid,text,bigint,text,boolean)', 'get_poll(uuid,bigint,text)', 'answer_poll(uuid,text,bigint,jsonb)',
+    'export_talk(uuid,text)']
   loop
     if exists (select 1 from pg_roles where rolname = 'anon') then
       execute format('grant execute on function %s to anon', f);

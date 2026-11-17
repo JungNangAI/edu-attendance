@@ -207,6 +207,23 @@
         </div>
       </div>
       <div class="opt-sec">
+        <label class="check big"><input type="checkbox" data-k="qna.on" id="qnaOn"> 질문 받기 <span class="hint-inline">참석자 → 강사, 교육 중 휴대폰으로</span></label>
+        <div id="qnaBox" class="opt-box">
+          <label class="check"><input type="checkbox" data-k="qna.anon"> 익명 질문 허용 (끄면 이름이 함께 나와요)</label>
+          <label class="check"><input type="checkbox" data-k="qna.moderate"> 화면에 띄우기 전에 담당자가 먼저 보기</label>
+          <p class="hint">강의실 화면의 <b>질문 받기</b>를 누르면 같은 QR로 질문을 받아요. 다른 사람 질문에 👍를 누를 수 있고, 👍 많은 순으로 보여요. 욕설은 저절로 숨기고, 전화번호 같은 숫자는 가려요.</p>
+        </div>
+      </div>
+      <div class="opt-sec">
+        <label class="check big"><input type="checkbox" data-k="poll.on" id="pollOn"> 질문 던지기 (워드클라우드) <span class="hint-inline">강사 → 참석자, 답이 낱말 구름으로</span></label>
+        <div id="pollBox" class="opt-box">
+          <label class="check"><input type="checkbox" data-k="poll.anon"> 익명으로 받기 (끄면 엑셀에 이름이 붙고, 출석한 휴대폰만 답할 수 있어요)</label>
+          <div class="field"><label class="f" for="pollMax">한 사람이 낼 수 있는 낱말</label><select id="pollMax" data-k="poll.max"><option value="1">1개</option><option value="2">2개</option><option value="3">3개</option><option value="5">5개</option></select></div>
+          <div class="field"><label class="f" for="pollPrep">미리 써 둘 질문 (한 줄에 하나, 선택)</label><textarea id="pollPrep" data-k="poll.prepared" rows="3" maxlength="1200" placeholder="예: AI 하면 떠오르는 낱말은?&#10;오늘 교육에서 기억에 남는 한 가지는?"></textarea></div>
+          <p class="hint">강의실 화면의 <b>질문 던지기</b>에서 미리 쓴 질문을 고르거나 그 자리에서 써요. 출석한 휴대폰에는 질문이 저절로 떠요. 답은 많이 나온 낱말일수록 크게 보여요.</p>
+        </div>
+      </div>
+      <div class="opt-sec">
         <label class="check big"><input type="checkbox" data-k="lottery"> 경품 추첨 쓰기 <span class="hint-inline">강의실 화면 [더보기]에 추첨 버튼</span></label>
       </div>
     </section>
@@ -249,8 +266,8 @@
 <script src="config.js"></script>
 <script src="assets/qrcode.js?v=20261115"></script>
 <script src="assets/xlsx.full.min.js?v=20261115"></script>
-<script src="assets/common.js?v=20261115b"></script>
+<script src="assets/common.js?v=20261117"></script>
 <script src="assets/cert.js?v=20261115"></script>
-<script src="assets/admin.js?v=20261116"></script>
+<script src="assets/admin.js?v=20261117"></script>
 </body>
 </html>

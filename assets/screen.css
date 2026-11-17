@@ -171,3 +171,59 @@ body.phone-admin .ab-list a{font-size:17px;font-weight:700;padding:4px 8px}
 .lot-go{background:#ffd43b;color:#222b45;box-shadow:0 5px 0 #c9a21a}.lot-go:active{transform:translateY(4px);box-shadow:0 1px 0 #c9a21a}.lot-go:disabled{opacity:.6}
 .lot-x{background:#e6e8ef;color:#222b45}
 .lot-win{margin:14px 0 0;color:#4a5068;font-size:15px}
+
+/* ---------- 질문 받기 · 질문 던지기(워드클라우드) ---------- */
+body.mode-talk .board{display:none}
+body.mode-talk .counter{display:none}
+body.mode-talk #chip{background:#7048e8;color:#fff}
+.admin-bar button.talk{background:#5b3fc4}
+.admin-bar button.talk:hover{background:#6e52d6}
+.talk{position:relative;min-height:0;min-width:0;display:flex;flex-direction:column;gap:1.4vh;background:rgba(255,255,255,.94);color:#1b2133;
+  border-radius:2vh;padding:2.2vh 2.4vh;box-shadow:0 1vh 4vh rgba(0,0,0,.12);overflow:hidden}
+.talk[hidden]{display:none}
+.tk-head{display:flex;align-items:center;gap:1.6vh;flex-wrap:wrap}
+.tk-head h2{font-size:4.2vh;font-weight:800;margin:0;flex:1 1 55%;min-width:0;word-break:keep-all;line-height:1.2;letter-spacing:-.01em}
+.tk-n{font-size:2.2vh;font-weight:700;color:#5b3fc4;background:#efeafd;border-radius:99px;padding:.5vh 1.6vh;white-space:nowrap}
+.tk-btns{display:flex;gap:8px;flex-wrap:wrap}
+.tk-btns button,.tk-w button,.tk-act button,.tk-spot-btns button,.tk-hidden button{font:inherit;font-size:14px;font-weight:600;border:0;border-radius:9px;padding:8px 12px;cursor:pointer;background:#2c3550;color:#fff;min-height:36px}
+.tk-btns button:hover{background:#3a466b}
+.tk-qs{flex:1;min-height:0;overflow:auto;columns:2;column-gap:1.6vh;padding:.4vh}
+.tk-card{break-inside:avoid;background:#fff;border:.25vh solid #e6e8f0;border-left:.9vh solid #7048e8;border-radius:1.4vh;padding:1.6vh 2vh;margin:0 0 1.6vh;position:relative;
+  box-shadow:0 .4vh 1.4vh rgba(30,35,60,.06)}
+.tk-card p{font-size:2.9vh;font-weight:700;line-height:1.4;margin:0 0 1vh;word-break:keep-all;overflow-wrap:anywhere}
+.tk-card footer{display:flex;gap:1.6vh;align-items:center;font-size:1.9vh;color:#6b7280}
+.tk-like{margin-left:auto;font-weight:800;color:#1b2133;background:#fff4d6;border-radius:99px;padding:.2vh 1.2vh}
+.tk-done{font-weight:700;color:#2f9e44}
+.tk-card.done{opacity:.55;border-left-color:#adb5bd}
+.tk-card.new{animation:tkIn .7s cubic-bezier(.2,1.3,.4,1) both}
+@keyframes tkIn{from{opacity:0;transform:translateY(2vh) scale(.96)}}
+.tk-act{display:flex;gap:6px;margin-top:1vh;opacity:0;transition:opacity .15s}
+.tk-card:hover .tk-act,.tk-card:focus-within .tk-act{opacity:1}
+.tk-act button{font-size:13px;padding:6px 10px;min-height:32px;background:#eef0f6;color:#1b2133}
+.tk-wait{background:#fff8e1;border:1px solid #ffe08a;border-radius:1.2vh;padding:1vh 1.4vh;font-size:15px;max-height:22vh;overflow:auto}
+.tk-wait[hidden]{display:none}
+.tk-w{display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #ffe8a8}
+.tk-w span{flex:1;min-width:0}
+.tk-empty{color:#868e96;font-size:2.4vh;text-align:center;margin:auto}
+.tk-empty.on{padding-top:12vh}
+.tk-cloud{flex:1;min-height:0;position:relative;display:flex}
+.tk-cloud canvas{position:absolute;inset:0}
+.tk-cloud .tk-empty{position:absolute;inset:0;display:grid;place-items:center}
+.tk-cloud .tk-empty[hidden]{display:none}
+.tk-hidden{font-size:14px;color:#6b7280;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.tk-hidden[hidden]{display:none}
+.tk-hidden button{background:#eef0f6;color:#1b2133;font-size:13px;padding:4px 10px;min-height:28px}
+.tk-tip{font-size:13px;color:#9aa0ac;margin:0;text-align:right}
+.tk-spot{position:fixed;inset:0;z-index:1500;background:rgba(12,14,30,.72);display:grid;place-items:center;padding:6vh 8vw;animation:fadeIn .2s}
+.tk-spot[hidden]{display:none}
+.tk-spot-box{background:#fff;color:#1b2133;border-radius:3vh;padding:5vh 6vh;max-width:80vw;box-shadow:0 3vh 8vh rgba(0,0,0,.35);animation:tkIn .5s cubic-bezier(.2,1.3,.4,1) both}
+.tk-spot-chip{display:inline-block;background:#7048e8;color:#fff;font-weight:800;font-size:2.2vh;border-radius:99px;padding:.5vh 1.6vh;margin-bottom:2vh}
+.tk-spot-box p{font-size:6vh;font-weight:800;line-height:1.35;margin:0 0 3vh;word-break:keep-all;overflow-wrap:anywhere}
+.tk-spot-box footer{display:flex;justify-content:space-between;font-size:2.6vh;color:#6b7280;font-weight:700}
+.tk-spot-btns{display:flex;gap:10px;justify-content:flex-end;margin-top:3vh}
+@keyframes fadeIn{from{opacity:0}}
+.tk-start .tk-prep{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.tk-start .tk-prep button{font:inherit;text-align:left;border:1.5px solid #dfe2ea;background:#f7f8fb;border-radius:10px;padding:10px 12px;cursor:pointer}
+.tk-start .tk-prep button:hover{border-color:#7048e8;background:#f3efff}
+.tk-start .app-modal-input{width:100%}
+body.phone-admin .talk{display:none}

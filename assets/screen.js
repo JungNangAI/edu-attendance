@@ -675,15 +675,21 @@
     } catch (e) { qrT = setTimeout(refreshQr, 4000); }
   }
   let surveyN = 0;
-  const modeSuffix = () => isOutMode() ? ' · 퇴실 받는 중' : mode === 'survey' ? ' · 만족도 조사 중' + (surveyN ? ` · 응답 ${surveyN}명` : '') : '';
+  let pollNow = null;
+  const isTalk = () => mode === 'qna' || mode === 'poll';
+  const modeSuffix = () => isOutMode() ? ' · 퇴실 받는 중' : mode === 'survey' ? ' · 만족도 조사 중' + (surveyN ? ` · 응답 ${surveyN}명` : '') : mode === 'qna' ? ' · 질문 받는 중' : mode === 'poll' ? ' · 질문 던지는 중' : '';
   function setSession(s) { sessionId = s.id; sessionLabel = s.label; $('session').textContent = s.label + modeSuffix(); }
   // 입실/퇴실 받기 화면 바꾸기
-  function applyMode(m) {
-    mode = m === 'out' || m === 'survey' ? m : 'in';
+  function applyMode(m, pid) {
+    const wasTalk = isTalk();
+    mode = ['out', 'survey', 'qna', 'poll'].includes(m) ? m : 'in';
+    if (pid !== undefined) pollNow = pid;
+    if (window.Talk) Talk.onMode(mode, pollNow);
+    if (wasTalk && !isTalk()) setTimeout(buildBoard, 50);
     document.body.classList.toggle('mode-out', isOutMode()); document.body.classList.toggle('mode-survey', mode === 'survey');
     const t = cfg.screen.texts;
-    $('chip').textContent = isOutMode() ? '퇴실 체크' : mode === 'survey' ? '만족도 조사' : (t.chip || '출석 체크');
-    $('qrHint').textContent = isOutMode() ? '수업이 끝났어요. QR을 찍고 퇴실해 주세요' : mode === 'survey' ? '오늘 교육은 어땠나요?\nQR을 찍고 답해 주세요' : qrHint();
+    $('chip').textContent = isOutMode() ? '퇴실 체크' : mode === 'survey' ? '만족도 조사' : mode === 'qna' ? '질문 받기' : mode === 'poll' ? '질문 던지기' : (t.chip || '출석 체크');
+    $('qrHint').textContent = isOutMode() ? '수업이 끝났어요. QR을 찍고 퇴실해 주세요' : mode === 'survey' ? '오늘 교육은 어땠나요?\nQR을 찍고 답해 주세요' : mode === 'qna' ? '궁금한 점이 있나요?\nQR을 찍고 질문을 보내 주세요' : mode === 'poll' ? 'QR을 찍고 답을 보내 주세요\n(출석한 휴대폰엔 저절로 떠요)' : qrHint();
     if (sessionLabel) $('session').textContent = sessionLabel + modeSuffix();
     modeBtn();
     markLeft(); setCount(displayed.length, false);
@@ -691,9 +697,11 @@
   // 퇴실 체크를 쓰는 행사에서만 버튼을 보인다 (퇴실 받는 중이면 되돌릴 수 있게 항상 보임)
   function modeBtn() {
     const b = $('aMode'); if (!b) return;
-    b.hidden = mode === 'survey' || !(cfg.screen.checkout === 'on' || isOutMode());
+    b.hidden = mode === 'survey' || isTalk() || !(cfg.screen.checkout === 'on' || isOutMode());
     b.textContent = isOutMode() ? '입실 받기로 돌아가기' : '퇴실 받기 시작';
-    const sv = $('aSurvey'); if (sv) { sv.hidden = !(cfg.survey && cfg.survey.on) && mode !== 'survey'; sv.textContent = mode === 'survey' ? '출석 받기로 돌아가기' : '만족도 받기 시작'; }
+    const sv = $('aSurvey'); if (sv) { sv.hidden = isTalk() || (!(cfg.survey && cfg.survey.on) && mode !== 'survey'); sv.textContent = mode === 'survey' ? '출석 받기로 돌아가기' : '만족도 받기 시작'; }
+    const qa = $('aQna'); if (qa) { qa.hidden = !(cfg.qna && cfg.qna.on) && mode !== 'qna'; qa.textContent = mode === 'qna' ? '출석 받기로 돌아가기' : '💬 질문 받기'; }
+    const pl = $('aPoll'); if (pl) { pl.hidden = !(cfg.poll && cfg.poll.on) && mode !== 'poll'; pl.textContent = mode === 'poll' ? '출석 받기로 돌아가기' : '☁️ 질문 던지기'; }
     const lo = $('aLottery'); if (lo) lo.hidden = !cfg.lottery;
   }
   // 새로 퇴실한 사람: 칸 불을 끄고 "수고하셨습니다" 배너
@@ -773,18 +781,18 @@
         if (x.name == null || rosterNos.has(x.no)) return;
         const p = { no: x.no, dept: x.dept || '', rank: '', name: x.name, extra: true }; extraMap.set(x.no, p); byNo.set(x.no, p);
       });
-      const newMode = b.session.mode || 'in';
+      const newMode = b.session.mode || 'in', newPoll = b.session.poll_id || null;
       if ((b.survey_n || 0) !== surveyN) { surveyN = b.survey_n || 0; if (mode === 'survey' && sessionLabel) $('session').textContent = sessionLabel + modeSuffix(); }
       if (b.session.id !== sessionId) {
         const had = sessionId !== null;
         outSet = new Set(); leaveQ = [];
-        mode = newMode; setSession(b.session); applyMode(newMode);
+        mode = newMode; setSession(b.session); applyMode(newMode, newPoll);
         if (had) { $('board').classList.remove('sweep'); void $('board').offsetWidth; $('board').classList.add('sweep'); }
         queue = []; running = false; displayed = []; msDone = 0; buildBoard(); setCount(0, false);
         applyList(nos, had);
         applyOuts(b.outs || [], false);
       } else {
-        if (newMode !== mode) applyMode(newMode);
+        if (newMode !== mode || newPoll !== pollNow) applyMode(newMode, newPoll);
         if (b.session.label !== sessionLabel) setSession(b.session);
         applyList(nos, true);
         applyOuts(b.outs || [], true);
@@ -915,6 +923,17 @@
     try { await A.rpc('set_mode', { p_id: eventId, p_token: token, p_mode: on ? 'survey' : 'in' }); applyMode(on ? 'survey' : 'in'); A.toast(on ? '만족도 조사를 받고 있어요' : '출석을 받고 있어요', 'ok'); }
     catch (e) { A.toast(/잘못된 값/.test(e.message) ? '만족도 조사는 저장소 업데이트(update.sql) 뒤에 쓸 수 있어요' : e.message, 'bad'); }
   }
+  // 질문 받기 / 질문 던지기 ↔ 출석 받기
+  async function setTalkMode(m) {
+    try { await A.rpc('set_mode', { p_id: eventId, p_token: token, p_mode: m }); applyMode(m); A.toast(m === 'qna' ? '질문을 받고 있어요' : '출석을 받고 있어요', 'ok'); }
+    catch (e) { A.toast(talkFnMsg(e, '질문 받기'), 'bad'); }
+  }
+  const talkFnMsg = (e, what) => /잘못된 값|Could not find|function/.test(e.message || '') ? `${what}는 저장소 업데이트(update.sql) 뒤에 쓸 수 있어요` : e.message;
+  async function toggleQna() {
+    const on = mode !== 'qna';
+    if (on && !(await A.dialog({ title: '💬 질문 받기 시작', message: '같은 QR을 찍으면 질문을 보낼 수 있어요.\n강의실 화면이 질문 판으로 바뀌고, 👍 많은 질문이 위로 올라가요.', ok: '질문 받기 시작' }))) return;
+    setTalkMode(on ? 'qna' : 'in');
+  }
   /* 글주임 경품 추첨: 이번 회차 출석자 중에서. 이름이 돌다가 멈추고 '당첨' 도장이 쾅 */
   let winners = [];
   function lottery() {
@@ -982,6 +1001,7 @@
       if (passOn) rows.push(['', '이수 인원', '', '', `${nPass}명`]);
       const sheets = [{ name: '출석부', rows, cols: [8, 22, 14, 10, ...ss.map(() => 26), 9, ...(late ? [9] : []), ...(passOn ? [8, 12] : []), 7, 28] }];
       sheets.push(...surveySheets(d, ss, all));
+      if (window.Talk) sheets.push(...await Talk.sheets(ss, all));
       saveBooks(sheets, `${fileSafe(cfg.title)}_출석부_전체.xlsx`);
     } catch (e) { A.toast(e.message, 'bad'); }
   }
@@ -1062,6 +1082,7 @@
     menu.addEventListener('click', () => setTimeout(closeMenu, 0)); addEventListener('click', e => { if (!e.target.closest('#adminBar')) closeMenu(); });
     $('aPhone').onclick = () => A.phoneOpen(eventId, token);
     $('aSurvey').onclick = toggleSurvey; $('aLottery').onclick = lottery;
+    $('aQna').onclick = toggleQna; $('aPoll').onclick = () => mode === 'poll' ? setTalkMode('in') : Talk.startPoll();
     // 휴대폰으로 열었으면: 큰 화면 대신 미참석자 목록부터 보여 준다
     if (new URLSearchParams(location.search).get('phone') || matchMedia('(max-width: 760px)').matches) {
       document.body.classList.add('phone-admin'); toggleAbsent(true);
@@ -1107,6 +1128,8 @@
       applyEvent(r.ev, r.am); eventSig = sigOf(r);
       token = A.takeToken(eventId);
       if (token) isAdmin = await A.rpc('check_admin', { p_id: eventId, p_token: token }).catch(() => false);
+      if (window.Talk) Talk.init({ eventId, token: () => token, isAdmin: () => isAdmin, cfg: () => cfg, toast: A.toast, noFnMsg: (e, w) => talkFnMsg(e, w),
+        setMode: m => setTalkMode(m), onBoard: b => { if (b && b.session) { setSession(b.session); applyMode(b.session.mode, b.session.poll_id || null); } } });
       if (isAdmin) setupAdmin();
       refreshQr();
       poll();

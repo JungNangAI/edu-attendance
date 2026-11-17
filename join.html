@@ -84,6 +84,28 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
 .sv-q textarea{width:100%;min-height:72px;font:inherit;font-size:16px}
 .survey .chips button.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 .survey .send{margin-top:16px}
+/* 질문 받기 · 질문 던지기(워드클라우드) */
+.talk{padding:20px 18px 26px}
+.talk .tk-top{text-align:center;margin-bottom:12px}
+.talk .tk-top .tag{display:inline-block;font-size:13px;font-weight:700;color:#5b3fc4;background:#efeafd;border-radius:99px;padding:4px 12px;margin-bottom:8px}
+.talk .tk-top h2{font-size:21px;margin:0;line-height:1.35;word-break:keep-all}
+.talk .tk-top p{margin:6px 0 0;color:var(--muted);font-size:14px}
+.talk textarea{width:100%;min-height:96px;font:inherit;font-size:16px}
+.talk .cnt{font-size:12px;color:var(--muted);text-align:right;margin-top:2px}
+.talk .send{margin-top:12px}
+.talk .words{display:flex;flex-direction:column;gap:8px}
+.talk .words input{font-size:18px}
+.tk-list{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+.tk-list h3{font-size:15px;margin:0 0 8px;color:var(--muted)}
+.tk-item{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.tk-item p{flex:1;min-width:0;margin:0;font-size:15px;line-height:1.45;overflow-wrap:anywhere}
+.tk-item small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.tk-item.done p{color:var(--muted)}
+.tk-like{flex:none;font:inherit;font-size:14px;font-weight:700;border:1.5px solid var(--line);background:var(--panel);border-radius:99px;padding:6px 10px;min-height:36px;cursor:pointer}
+.tk-like.on{border-color:#f5b301;background:#fff9e6}
+.tk-link{display:block;width:100%;margin-top:10px;font:inherit;font-size:15px;font-weight:700;color:#5b3fc4;background:#efeafd;border:0;border-radius:12px;padding:12px;cursor:pointer;min-height:44px}
+.check-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:15px}
+.check-row input{width:20px;height:20px}
 </style>
 </head>
 <body>
@@ -108,11 +130,12 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
   </section>
   <section class="panel result" id="result" hidden></section>
   <section class="panel survey" id="survey" hidden></section>
+  <section class="panel talk" id="talk" hidden></section>
   <section class="panel full" id="full" hidden></section>
 </main>
 <div class="bottom" id="bottom" hidden><div class="in"><button type="button" class="btn primary big" id="go" disabled>내 이름을 골라 주세요</button></div></div>
 <script src="config.js"></script>
-<script src="assets/common.js?v=20261115b"></script>
+<script src="assets/common.js?v=20261117"></script>
 <script src="assets/sound.js?v=20261115n"></script>
 <script>
 (function(){
@@ -124,7 +147,7 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
   let view = 'pick';          // pick 명단에서 고르기 / write 직접 쓰기 / me 내 퇴실
   let enter = null, pass = null, legacy = false, meP = null;
 
-  function show(which){ ['formPanel','result','full','survey'].forEach(id => $(id).hidden = id !== which); $('bottom').hidden = which !== 'formPanel'; }
+  function show(which){ ['formPanel','result','full','survey','talk'].forEach(id => $(id).hidden = id !== which); $('bottom').hidden = which !== 'formPanel'; if (which !== 'talk') talkView = null; }
   function full(t, m){ $('full').innerHTML = `<img class="mascot" src="assets/defaults/call.png" alt=""><h2>${A.esc(t)}</h2><p class="hint">${A.esc(m)}</p>`; show('full'); }
   const isOut = () => !!(session && session.mode === 'out');
   const word = () => isOut() ? '퇴실' : '출석';
@@ -198,7 +221,8 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
   function thanks(dup){
     $('result').className = 'panel result';
     $('result').innerHTML = `<img class="mascot" src="assets/defaults/geuljuim_attend.png" alt=""><h2>${dup ? '이미 답하셨어요' : '소중한 의견 고맙습니다!'}</h2><p class="meta">${dup ? '이번 회차 만족도 조사는 한 번만 낼 수 있어요.' : '보내 주신 의견은 다음 교육을 더 좋게 만드는 데 써요.'}</p>`;
-    show('result'); if (!dup) A.confetti({ count: 60, colors: [cfg.screen.accent, '#ffd43b', '#51cf66'] });
+    $('result').insertAdjacentHTML('beforeend', talkLinks());
+    show('result'); startLive(); if (!dup) A.confetti({ count: 60, colors: [cfg.screen.accent, '#ffd43b', '#51cf66'] });
   }
   function showSurvey(r, after){
     const qs = cfg.survey.questions, ans = {};
@@ -231,6 +255,106 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
     };
   }
 
+  /* ---------- 질문 받기 · 질문 던지기 ---------- */
+  let talkView = null, liveT = 0, liveOn = false, listT = 0, pollSeen = null, backTo = null;
+  const qnaOn = () => !!(cfg && cfg.qna && cfg.qna.on) && !legacy && !PREVIEW;
+  const pollOn = () => !!(cfg && cfg.poll && cfg.poll.on) && !legacy && !PREVIEW;
+  function talkLinks(){ return qnaOn() ? '<button type="button" class="tk-link" data-talk="ask">💬 강사님께 질문하기</button>' : ''; }
+  function showAsk(){
+    talkView = 'ask'; const anonOk = cfg.qna.anon !== false;
+    $('talk').innerHTML = `<div class="tk-top"><span class="tag">질문 받기</span><h2>궁금한 점을 보내 주세요</h2><p>${anonOk ? '이름 없이 보낼 수 있어요' : '이름이 함께 보여요'} · 보낸 질문은 강의실 화면에 나와요</p></div>
+      <label class="sr" for="tkBody">질문</label><textarea id="tkBody" maxlength="200" placeholder="예: 오늘 자료는 어디서 받을 수 있나요?"></textarea><div class="cnt"><span id="tkCnt">0</span>/200</div>
+      ${anonOk ? '<label class="check-row"><input type="checkbox" id="tkNamed"> 이름 밝히고 보내기</label>' : ''}
+      <p class="err" id="tkErr" role="alert"></p><button type="button" class="btn primary big send" id="tkSend">질문 보내기</button>
+      ${backTo ? '<button type="button" class="again" id="tkBack">돌아가기</button>' : ''}
+      <div class="tk-list" id="tkList"></div>`;
+    show('talk'); talkView = 'ask';
+    $('tkBody').oninput = e => { $('tkCnt').textContent = e.target.value.length; };
+    if ($('tkBack')) $('tkBack').onclick = () => { const f = backTo; backTo = null; f && f(); };
+    $('tkSend').onclick = async () => {
+      const body = $('tkBody').value.trim(); if (body.length < 2) { $('tkErr').textContent = '질문을 두 글자 이상 써 주세요'; return; }
+      const btn = $('tkSend'); btn.disabled = true; btn.textContent = '보내는 중…'; $('tkErr').textContent = '';
+      try {
+        const x = await A.rpc('ask_question', { p_id: eventId, p_device: DEVICE, p_body: body, p_named: !!($('tkNamed') && $('tkNamed').checked) });
+        if (x.status === 'error') throw new Error(x.message);
+        $('tkBody').value = ''; $('tkCnt').textContent = '0';
+        A.toast(x.wait ? '보냈어요. 담당자가 확인한 뒤 화면에 나와요' : '질문을 보냈어요!', 'ok');
+        try { Sound.sfx('phone'); } catch (e) {}
+        loadList();
+      } catch (er) { $('tkErr').textContent = A.noFn && A.noFn(er) ? '아직 준비 중이에요. 담당자에게 말씀해 주세요(저장소 업데이트 필요).' : er.message || '보내지 못했어요. 다시 눌러 주세요.'; }
+      btn.disabled = false; btn.textContent = '질문 보내기';
+    };
+    $('tkList').onclick = async e => {
+      const b = e.target.closest('[data-like]'); if (!b || b.classList.contains('on')) return;
+      b.classList.add('on');
+      try { await A.rpc('like_question', { p_id: eventId, p_device: DEVICE, p_qid: +b.dataset.like }); loadList(); } catch (er) { b.classList.remove('on'); }
+    };
+    loadList();
+  }
+  async function loadList(){
+    clearTimeout(listT); if (talkView !== 'ask') return;
+    try {
+      const r = await A.rpc('get_questions', { p_id: eventId, p_device: DEVICE, p_token: null });
+      const qs = (r && r.list) || [];
+      if ($('tkList')) $('tkList').innerHTML = qs.length ? `<h3>지금까지 나온 질문 ${qs.length}개 · 궁금하면 👍</h3>` + qs.map(q => `<div class="tk-item${q.status === 'done' ? ' done' : ''}"><p>${A.esc(q.body)}<small>${q.mine ? '내 질문' : q.who ? A.esc(q.who.name) : '익명'}${q.status === 'done' ? ' · 답변 완료' : q.status === 'wait' ? ' · 담당자 확인 중' : ''}</small></p>
+        ${q.status === 'wait' ? '' : `<button type="button" class="tk-like${q.liked ? ' on' : ''}" data-like="${q.id}" aria-label="나도 궁금해요">👍 ${q.likes}</button>`}</div>`).join('') : '';
+    } catch (e) {}
+    listT = setTimeout(loadList, document.hidden ? 15000 : 5000);
+  }
+  function showPollQ(p, answered){
+    talkView = 'poll'; pollSeen = p.id;
+    const n = Math.max(1, Math.min(5, p.max || 3));
+    if (answered || store.get('pl:' + p.id)) {
+      const mine = store.get('pl:' + p.id) || [];
+      $('talk').innerHTML = `<div class="tk-top"><span class="tag">질문 던지기</span><h2>${A.esc(p.q)}</h2><p>답을 보냈어요! 강의실 화면의 낱말 구름을 보세요 ☁️</p></div>
+        ${Array.isArray(mine) && mine.length ? `<p class="hint2" style="text-align:center">내 답: ${mine.map(A.esc).join(', ')}</p>` : ''}${talkLinks()}${backTo ? '<button type="button" class="again" id="tkBack">돌아가기</button>' : ''}`;
+    } else if (!p.open) {
+      $('talk').innerHTML = `<div class="tk-top"><span class="tag">질문 던지기</span><h2>${A.esc(p.q)}</h2><p>답을 그만 받았어요. 강의실 화면을 보세요</p></div>${talkLinks()}`;
+    } else {
+      $('talk').innerHTML = `<div class="tk-top"><span class="tag">질문 던지기</span><h2>${A.esc(p.q)}</h2><p>떠오르는 낱말을 ${n > 1 ? n + '개까지' : '하나'} 써 주세요${p.anon ? ' · 익명' : ' · 이름이 기록돼요'}</p></div>
+        <div class="words">${Array.from({ length: n }, (_, i) => `<input type="text" maxlength="15" data-w="${i}" placeholder="${i ? '낱말 ' + (i + 1) + ' (선택)' : '낱말 하나'}" aria-label="낱말 ${i + 1}" autocomplete="off">`).join('')}</div>
+        <p class="err" id="tkErr" role="alert"></p><button type="button" class="btn primary big send" id="tkSend">보내기</button>`;
+      $('talk').querySelector('input').focus();
+      $('tkSend').onclick = async () => {
+        const ws = [...$('talk').querySelectorAll('[data-w]')].map(i => i.value.trim()).filter(Boolean);
+        if (!ws.length) { $('tkErr').textContent = '낱말을 하나 이상 써 주세요'; return; }
+        const btn = $('tkSend'); btn.disabled = true; btn.textContent = '보내는 중…';
+        try {
+          const x = await A.rpc('answer_poll', { p_id: eventId, p_device: DEVICE, p_poll: p.id, p_words: ws });
+          if (x.status === 'error') { if (x.code === 'closed') { p.open = false; return showPollQ(p, false); } throw new Error(x.message); }
+          store.set('pl:' + p.id, ws); try { Sound.sfx('phone'); } catch (e) {}
+          A.confetti({ count: 50, colors: ['#e03131', '#1c7ed6', '#f08c00', '#2f9e44', '#ae3ec9'] });
+          showPollQ(p, true);
+        } catch (er) { btn.disabled = false; btn.textContent = '보내기'; $('tkErr').textContent = er.message || '보내지 못했어요. 다시 눌러 주세요.'; }
+      };
+    }
+    show('talk'); talkView = 'poll';
+    if ($('tkBack')) $('tkBack').onclick = () => { const f = backTo; backTo = null; f && f(); };
+  }
+  // 출석한 뒤 화면을 켜 두면: 강사가 질문을 던질 때 저절로 뜬다(5초마다 확인, 3시간까지)
+  function startLive(){
+    if (liveOn || !pollOn() || PREVIEW) return; liveOn = true;
+    const until = Date.now() + 3 * 3600e3;
+    const tick = async () => {
+      if (Date.now() > until) { liveOn = false; return; }
+      const typing = talkView === 'ask' && $('tkBody') && $('tkBody').value.trim();   // 질문을 쓰는 중이면 방해하지 않는다
+      if (!document.hidden && !typing) {
+        try {
+          const r = await A.rpc('get_poll', { p_id: eventId, p_poll: null, p_device: DEVICE });
+          const p = r && r.poll;
+          if (r && r.mode === 'poll' && p && p.open && !r.answered && !store.get('pl:' + p.id) && (talkView !== 'poll' || pollSeen !== p.id)) {
+            try { navigator.vibrate && navigator.vibrate(120); } catch (e) {}
+            clearTimeout(listT); showPollQ(p, false);
+          }
+        } catch (e) { if (A.noFn && A.noFn(e)) { liveOn = false; return; } }
+      }
+      liveT = setTimeout(tick, document.hidden ? 15000 : 5000);
+    };
+    liveT = setTimeout(tick, 1500);
+  }
+  document.addEventListener('click', e => { const b = e.target.closest('[data-talk="ask"]'); if (!b) return; const cur = $('result').hidden ? null : $('result').innerHTML; backTo = cur ? () => { $('result').innerHTML = cur; show('result'); bindAgain(); } : null; showAsk(); });
+  let bindAgain = () => {};
+
   function showResult(r){
     if (r.kind === 'out' && r.status !== 'dup' && surveyOn() && !(enter && enter.answered) && !store.get('sv:' + (session && session.id))) {
       return showSurvey(r, () => showResultCore(r));
@@ -248,9 +372,11 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
       <p class="meta">${A.esc(r.session || '')} · ${out && r.in_at ? A.hhmm(r.in_at) + ' 입실 · ' : ''}${r.at ? A.hhmm(r.at) : ''} ${out ? '퇴실' : dup ? '제출' : '출석'}</p>
       ${dup ? '' : out ? `<p class="hint2">${r.in_at ? '오늘도 수고하셨습니다!' : '입실 기록이 없어요. 담당자에게 말씀해 주세요.'}</p>` : `<p class="hint2">${A.esc(cfg.join.ok_hint)}${cfg.screen.checkout === 'on' && strictOn() ? '<br>끝날 때 이 휴대폰으로 QR을 한 번 더 찍어 퇴실해 주세요.' : ''}</p>`}
       ${certOk ? `<a class="btn primary big" href="${certUrl(r)}" target="_blank" rel="noopener">${A.esc(cfg.cert.button || '위촉장 받기')}</a>` : ''}
+      ${talkLinks()}
       <br><button type="button" class="again" id="again">내 이름이 아니에요</button>`;
-    show('result');
-    $('again').onclick = async () => {
+    show('result'); startLive();
+    bindAgain = () => { if ($('again')) $('again').onclick = againFn; };
+    const againFn = async () => {
       if (strictOn() && !PREVIEW) {   // 한 휴대폰 한 사람: 낸 것을 되돌려야 다시 고를 수 있다
         const ok = await A.dialog({ title: '다시 고르기', message: `${r.name} 님으로 낸 ${out ? '퇴실' : '출석'}을 되돌리고 다시 고를까요?`, ok: '되돌리고 다시 고르기' });
         if (!ok) return;
@@ -260,6 +386,7 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
       store.del(doneKey(r.kind)); store.del('me:' + eventId);
       backToForm();
     };
+    bindAgain();
     if (!dup) { try { Sound.sfx('phone'); } catch (e) {} }
     if (!dup) A.confetti({ count: 90, colors: [cfg.screen.accent, '#ffd43b', '#51cf66', '#4dabf7'] });
   }
@@ -311,6 +438,13 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
       // 이 휴대폰이 이미 냈는지, (바뀌는 QR이면) 방금 찍은 QR이 맞는지 저장소에 묻는다. 저장소가 옛 버전이면 예전 방식으로
       try { enter = await A.rpc('join_enter', { p_id: eventId, p_device: DEVICE, p_code: A.query('c') }); } catch (e) { enter = null; legacy = true; }
       if (enter) { pass = enter.pass; if (enter.mode && session) { session.mode = enter.mode; apply(ev, assets); } }
+      if (session && (session.mode === 'qna' || session.mode === 'poll')) {   // 담당자가 '질문 받기'·'질문 던지기'를 누른 동안
+        $('title').textContent = session.mode === 'qna' ? '질문 받기' : '질문 던지기'; $('session').textContent = session.label;
+        if (session.mode === 'qna') { if (!qnaOn()) return full('지금은 출석을 받지 않아요', '담당자에게 말씀해 주세요.'); startLive(); return showAsk(); }
+        let r = null; try { r = await A.rpc('get_poll', { p_id: eventId, p_poll: null, p_device: DEVICE }); } catch (e) {}
+        if (!r || !r.poll) return full('잠시만 기다려 주세요', '강사님이 질문을 준비하고 있어요.');
+        startLive(); return showPollQ(r.poll, r.answered);
+      }
       if (session && session.mode === 'survey') {   // 담당자가 '만족도 받기 시작'을 누른 동안: 같은 QR이 설문
         $('title').textContent = '만족도 조사'; $('session').textContent = session.label;
         if (!surveyOn()) return full('지금은 출석을 받지 않아요', '담당자에게 말씀해 주세요.');

@@ -9,6 +9,9 @@
     // 이수 기준(전체 회차 중 출석 비율)·지각 기준 시각, 만족도 조사, 경품 추첨 — 모두 기본은 꺼짐
     pass: { on: false, min_pct: '80', late: '' },
     survey: { on: false, anon: true, questions: [] },
+    // 질문 받기(참석자→강사) · 질문 던지기(강사→참석자, 워드클라우드) — 기본은 꺼짐. anon: 익명 허용/익명으로 받기
+    qna: { on: false, anon: true, moderate: false },
+    poll: { on: false, anon: true, max: '3', prepared: '' },
     lottery: false,
     // 출석 방식: walkin 명단에 없는 사람도 받기 / one_phone 한 휴대폰 한 사람 / rotate_qr 30초마다 바뀌는 QR / depts 직접 쓸 때 보여 줄 부서 목록
     attend: { walkin: false, one_phone: false, rotate_qr: false, depts: [] },
