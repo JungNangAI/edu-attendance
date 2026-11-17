@@ -308,4 +308,5 @@ body.phone-admin .buddy{display:none}
 .tk-sum[hidden]{display:none}
 .tk-sum span{background:#fff7d6;border:1px solid #f5d76e;border-radius:99px;padding:.4vh 1.4vh}
 .tk-sum span small{color:#b08900;margin-left:.4vh}
-body:not(.mode-talk) .buddy{bottom:17vh}
+body:not(.mode-talk) .buddy{left:auto;right:2vh;bottom:9vh;flex-direction:row-reverse}
+body:not(.mode-talk) .buddy p::before{left:auto;right:-1.6vh;border-right:1vh solid transparent;border-left:1.6vh solid #1b2133}
