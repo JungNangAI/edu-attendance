@@ -156,10 +156,23 @@
       applyMapping.warned = true;
       A.toast('명단을 바꿨어요. 연번이 같은 사람끼리 출석 기록이 이어져요.');
     }
+    state.removed = [];   // 새로 읽으면 뺀 사람 목록도 처음부터
     state.roster = list;
     renderRoster(skipped);
     touch('roster');
   }
+  // 명단에서 한 사람씩 빼기 / 되살리기 (저장하기 전까지는 되돌릴 수 있어요)
+  $('rosterTable').addEventListener('click', e => {
+    const b = e.target.closest('[data-rdel]'); if (!b) return;
+    const i = state.roster.findIndex(p => p.no === +b.dataset.rdel); if (i < 0) return;
+    (state.removed = state.removed || []).push(state.roster[i]);
+    state.roster.splice(i, 1); renderRoster(); touch('roster');
+  });
+  $('rosterInfo').addEventListener('click', e => {
+    if (!e.target.closest('#rUndo')) return;
+    const back = (state.removed || []).pop(); if (!back) return;
+    state.roster.push(back); state.roster.sort((a, b) => a.no - b.no); renderRoster(); touch('roster');
+  });
   /* 지난 '전체 출석부' 엑셀이면: 회차 열("1회차 (2026-10-01)")과 칸("출석 09:58 / 퇴실 12:01")을 읽어 이어 붙일 기록을 만든다 */
   function detectHistory(headers, data) {
     const cols = headers.map((h, i) => { const m = String(h).match(/^(.+?)\s*\((\d{4})[-.]\s*(\d{1,2})[-.]\s*(\d{1,2})\.?\)$/); return m ? { i, label: m[1].trim(), date: `${m[2]}-${m[3].padStart(2, '0')}-${m[4].padStart(2, '0')}` } : null; }).filter(Boolean);
@@ -193,14 +206,15 @@
     const r = state.roster;
     const names = {}; r.forEach(p => names[p.name] = (names[p.name] || 0) + 1);
     const dup = Object.keys(names).filter(n => names[n] > 1);
-    $('rosterInfo').innerHTML = r.length ? `<div class="ok-box"><b>${r.length}명</b>을 읽었어요.${skipped && !state.history ? ` 이름이 빈 줄 ${skipped}개는 뺐어요.` : ''}
-      ${dup.length ? `<br>동명이인: ${dup.map(A.esc).join(', ')} — 휴대폰에서 부서와 함께 보여서 구분돼요.` : ''}</div>` : '';
+    $('rosterInfo').innerHTML = r.length ? `<div class="ok-box">${(state.removed || []).length ? `명단 <b>${r.length}명</b>.` : `<b>${r.length}명</b>을 읽었어요.`}${skipped && !state.history ? ` 이름이 빈 줄 ${skipped}개는 뺐어요.` : ''}
+      ${dup.length ? `<br>동명이인: ${dup.map(A.esc).join(', ')} — 휴대폰에서 부서와 함께 보여서 구분돼요.` : ''}
+      ${(state.removed || []).length ? `<br>뺀 사람 ${state.removed.length}명 (${state.removed.slice(-3).map(p => A.esc(p.name)).join(', ')}${state.removed.length > 3 ? ' 등' : ''}) <button type="button" class="link-btn" id="rUndo">↩ 방금 뺀 사람 되살리기</button>` : '<br><span class="hint-inline">빼야 할 사람은 표 오른쪽 ✕를 누르세요.</span>'}</div>` : '';
     const ph = r.some(p => p.phone), nPh = r.filter(p => p.phone).length;
     if (r.length && ph) $('rosterInfo').firstElementChild.insertAdjacentHTML('beforeend', `<br>연락처 ${nPh}명 — 관리 링크로 연 화면(미참석자 확인)에서만 보이고, 참석자 휴대폰에는 나오지 않아요.`);
     if (r.length && state.history) $('rosterInfo').insertAdjacentHTML('beforeend', `<div class="ok-box hist-box"><label class="check"><input type="checkbox" id="histChk" checked> <b>지난 출석 기록도 이어 붙이기</b></label>
       <p class="hint" style="margin:4px 0 0">받아 두었던 '전체 출석부' 파일이에요. 지난 회차 ${state.history.sessions.length}개(출석 ${state.history.rows}건)를 ${EDIT ? '저장할' : '만들'} 때 함께 되살려요. 같은 회차를 두 번 올려도 한 번만 들어가요.</p></div>`);
-    $('rosterTable').innerHTML = r.length ? `<thead><tr><th>연번</th><th>부서명</th><th>직위(직급)</th><th>성명</th>${ph ? '<th>연락처</th>' : ''}</tr></thead><tbody>` +
-      r.map(p => `<tr><td>${p.no}</td><td>${A.esc(p.dept)}</td><td>${A.esc(p.rank)}</td><td>${A.esc(p.name)}</td>${ph ? `<td>${A.esc(p.phone || '')}</td>` : ''}</tr>`).join('') + '</tbody>' : '';
+    $('rosterTable').innerHTML = r.length ? `<thead><tr><th>연번</th><th>부서명</th><th>직위(직급)</th><th>성명</th>${ph ? '<th>연락처</th>' : ''}<th class="rdel-h"><span class="sr">빼기</span></th></tr></thead><tbody>` +
+      r.map(p => `<tr><td>${p.no}</td><td>${A.esc(p.dept)}</td><td>${A.esc(p.rank)}</td><td>${A.esc(p.name)}</td>${ph ? `<td>${A.esc(p.phone || '')}</td>` : ''}<td class="rdel"><button type="button" data-rdel="${p.no}" aria-label="${A.esc(p.name)} 명단에서 빼기" title="명단에서 빼기">✕</button></td></tr>`).join('') + '</tbody>' : '';
   }
   $$('[data-map]').forEach(s => s.addEventListener('change', e => { e.stopPropagation(); applyMapping(); }));
   async function readFile(f) {

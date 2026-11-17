@@ -144,3 +144,10 @@ table.roster th{background:var(--soft);position:sticky;top:0}
 .q-item select{width:auto}
 .q-item textarea{min-height:54px}
 .q-item .q-del{margin-left:auto}
+
+/* 명단 한 사람씩 빼기 */
+table.roster td.rdel,table.roster th.rdel-h{width:44px;text-align:center;padding:4px}
+table.roster td.rdel button{font:inherit;font-size:14px;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;color:#a33;cursor:pointer}
+table.roster td.rdel button:hover{background:#fdecec;border-color:#e8a1a1}
+table.roster tr:hover td{background:#fffaf0}
+.link-btn{font:inherit;font-size:14px;font-weight:700;color:#5420c4;background:none;border:0;padding:0 0 0 6px;cursor:pointer;text-decoration:underline}
