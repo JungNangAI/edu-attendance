@@ -64,7 +64,7 @@ textarea{min-height:110px;resize:vertical}
 .topbar::after{content:"";position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--tri)}
 .topbar .slogan{height:26px;width:auto;display:block}
 .tri{display:flex;height:6px;background:var(--tri)}
-/* 글주임 캐릭터 */
+/* 기본 캐릭터 */
 .mascot{display:block;height:auto;user-select:none;pointer-events:none;filter:drop-shadow(0 6px 10px rgba(60,40,0,.12))}
 @keyframes bob{50%{transform:translateY(-6px) rotate(-1.5deg)}}
 @keyframes popIn{0%{transform:scale(.4) translateY(20px);opacity:0}70%{transform:scale(1.06)}100%{transform:none;opacity:1}}

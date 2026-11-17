@@ -135,7 +135,7 @@
         <path d="M50 42 m-4 0 a4 4 0 1 1 4 4 a2.6 2.6 0 1 1 -2.6 -2.6" stroke="${edge}" stroke-opacity=".7" stroke-width="1.1" fill="none"/></g></g></g></svg>`;
   }
 
-  /* ---------- 글주임 무리 (10명): 옆자리 주민 + 출석 때 날아오는 손님 + 전원 출석 퍼레이드 ---------- */
+  /* ---------- 기본 캐릭터 무리 (10명): 옆자리 주민 + 출석 때 날아오는 손님 + 전원 출석 퍼레이드 ---------- */
   const CAST_ALL = [['main', '{n}님, 환영해요!', '환영해요!'], ['news', '{n}님, 반가운 소식!', '반가워요!'], ['chuck', '{n}님, 척척 환영!', '척척 환영!'],
     ['call', '{n}님, 반갑습니다!', '반갑습니다!'], ['meet', '{n}님, 어서 오세요!', '어서 오세요!'], ['night', '{n}님, 든든하게 환영!', '든든하게 환영!'],
     ['law', '{n}님, 대환영이에요!', '대환영이에요!'], ['fin', '{n}님, 환영 100점!', '환영 100점!'], ['welcome', '{n}님, 어서 와요!', '어서 와요!'], ['relay', '{n}님, 환영 바통 쏙!', '환영 바통 쏙!']];
@@ -163,7 +163,7 @@
   const AR = {};
   function arOf(src) { if (AR[src]) return AR[src]; const im = new Image(); im.onload = () => { AR[src] = im.naturalHeight / im.naturalWidth; }; im.src = src; return 0.8; }
   function castStop() { castTimers.forEach(t => clearInterval(t)); castTimers = []; castFly = 0; }
-  function castPool() {   // 행사에서 올린 캐릭터가 있으면 그것만, 없으면 글주임 10명
+  function castPool() {   // 행사에서 올린 캐릭터가 있으면 그것만, 없으면 기본 캐릭터 10명
     if (cfg.screen.characters === false) return [];
     const cheer = cfg.screen.texts.cheer || '환영해요!';
     if (assets.char_left || assets.char_right) return [assets.char_left, assets.char_right].filter(Boolean).map(src => ({ src, tpl: '{n}님, ' + cheer, gen: cheer }));
@@ -237,7 +237,7 @@
     }
     return [F(0, T(W, H, 0, .3)), F(.2, T((W + tx) / 2, Math.min(ty, H * .4) - h * .8, 360, 1.15)), ...hold(720), F(.86, T(tx, ty - h * .3, 720, 1.05)), F(1, T(-sz, -h, 1080, .4))];
   }
-  function castArrive(slot, p) {   // 새 출석자 칸 위로 글주임이 날아와 이름을 불러준다
+  function castArrive(slot, p) {   // 새 출석자 칸 위로 캐릭터가 날아와 이름을 불러준다
     const board = $('board'), layer = board.querySelector('.cast');
     if (!layer || reduced() || castFly >= 4) return;
     const M = MOT();
@@ -269,7 +269,7 @@
     const t = el('div', 'ms-toast'); t.innerHTML = tail[0] === '%' ? `<b>${m}%</b>${A.esc(tail.slice(1))}` : `<b>${m}</b>${A.esc(tail)}`; document.body.appendChild(t);
     t.animate([{ transform: 'translate(-50%,-30%) scale(.3)', opacity: 0 }, { transform: 'translate(-50%,0) scale(1.15)', opacity: 1, offset: .2 }, { transform: 'translate(-50%,0) scale(1)', opacity: 1, offset: .85 }, { transform: 'translate(-50%,-20%) scale(.8)', opacity: 0 }], { duration: 3000 }).onfinish = () => t.remove();
   }
-  function castFinale(board, ratio = 1) {   // ratio: 출석률 — 퍼레이드에 나오는 캐릭터 수가 그 비율만큼   // 전원 출석: 글주임 퍼레이드 + 캐릭터 비
+  function castFinale(board, ratio = 1) {   // ratio: 출석률 — 퍼레이드에 나오는 캐릭터 수가 그 비율만큼   // 전원 출석: 캐릭터 퍼레이드 + 캐릭터 비
     const layer = board.querySelector('.cast'); if (!layer || reduced()) return;
     const pool = castPool(); if (!pool.length) return;
     const B = board.getBoundingClientRect(), W = B.width, H = B.height, sz = Math.max(60, W * 0.15), n = Math.max(1, Math.round(10 * ratio));
@@ -597,7 +597,7 @@
       }
       onArrive(p);
       const m = msReached();
-      if (m > msDone) {   // 50·60·70·80·90% 달성 때마다 그 비율만큼의 글주임이 축하, 100%는 전원
+      if (m > msDone) {   // 50·60·70·80·90% 달성 때마다 그 비율만큼의 캐릭터가 축하, 100%는 전원
         msDone = m;
         setTimeout(() => {
           if (!roster.length) {   // 명단 없이 받을 때: 10명, 20명… 돌파
@@ -616,7 +616,7 @@
     if (impl.arrive && !matchMedia('(prefers-reduced-motion: reduce)').matches) impl.arrive(s, $('board'), finish); else finish();
   }
 
-  /* ---------- 글주임 해설 · 출석 완료 예측 ---------- */
+  /* ---------- 실시간 해설 · 출석 완료 예측 ---------- */
   const deptsDone = new Set(); let arrTimes = [], rushAt = 0, quietAt = 0;
   const buddyOn = () => cfg.screen.buddy !== false && !PREVIEW && window.Buddy;
   function buddy(t, o) { if (buddyOn()) Buddy.say(t, o); }

@@ -289,7 +289,7 @@ body.mode-talk #chip{background:#7048e8;color:#fff}
 .tk-tx:nth-child(4n+2){border-left-color:#1c7ed6}.tk-tx:nth-child(4n+3){border-left-color:#f08c00}.tk-tx:nth-child(4n+4){border-left-color:#2f9e44}
 body.phone-admin .talk{display:none}
 
-/* ---------- 글주임 해설 · 출석 완료 예측 ---------- */
+/* ---------- 실시간 해설 · 출석 완료 예측 ---------- */
 .eta{font-size:1.9vh;font-weight:700;color:var(--ink);background:var(--panel);border:1px dashed var(--line);border-radius:1.4vh;padding:1vh 1.4vh;line-height:1.35}
 .eta b{color:#7048e8;font-size:1.15em}
 .eta[hidden]{display:none}

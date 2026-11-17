@@ -154,7 +154,7 @@
     if (sig === drawnSig) return; drawnSig = sig;
     if (view === 'cloud') draw(poll.words); else if (view === 'bars') bars(); else texts();
   }
-  // 글주임 해설: 응답 수, 1등 낱말·보기, 퀴즈 정답률
+  // 실시간 해설: 응답 수, 1등 낱말·보기, 퀴즈 정답률
   let pbId = null, pbN = 0, pbTop = null, pbReveal = false;
   function pollBuddy() {
     if (!C.buddy || !poll) return;

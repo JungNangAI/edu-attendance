@@ -140,7 +140,7 @@
 .theme-apartment .count-num b{font-size:5.6vh}
 
 
-/* ===== 글주임 무리: 옆자리 주민 · 날아오는 손님 · 퍼레이드 ===== */
+/* ===== 캐릭터 무리: 옆자리 주민 · 날아오는 손님 · 퍼레이드 ===== */
 .cast{position:absolute;inset:0;pointer-events:none;z-index:1200}
 .res{position:absolute;transform-origin:50% 100%}
 .res.l{left:.4%}.res.r{right:.4%}
