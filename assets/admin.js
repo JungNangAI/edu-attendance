@@ -109,7 +109,7 @@
       ['테마', (A.THEMES[c.screen.theme] || {}).label],
       ['증서', c.cert.enabled ? `${c.cert.title} · ${c.cert.only_attendees === 'pass' ? '이수한 사람만' : c.cert.only_attendees === 'inout' ? '입실·퇴실 모두 한 사람만' : c.cert.only_attendees ? '출석한 사람만' : '누구나'}` : '쓰지 않음']
     ];
-    const extra = [c.pass.on ? `이수 ${c.pass.min_pct === '100' ? '모두 출석' : c.pass.min_pct + '% 이상'}${c.pass.late ? ' · 지각 ' + c.pass.late : ''}` : '', c.survey.on ? `만족도 ${c.survey.questions.length}문항${c.survey.anon ? '(익명)' : ''}` : '', c.qna && c.qna.on ? '질문 받기' : '', c.poll && c.poll.on ? '워드클라우드' : '', c.lottery ? '경품 추첨' : ''].filter(Boolean);
+    const extra = [c.pass.on ? `이수 ${c.pass.min_pct === '100' ? '모두 출석' : c.pass.min_pct + '% 이상'}${c.pass.late ? ' · 지각 ' + c.pass.late : ''}` : '', c.survey.on ? `만족도 ${c.survey.questions.length}문항${c.survey.anon ? '(익명)' : ''}` : '', c.qna && c.qna.on ? '질문 받기' : '', c.poll && c.poll.on ? '질문 던지기' : '', c.groups && c.groups.on ? '조 편성' : ''].filter(Boolean);
     if (extra.length) items.push(['더 쓰는 기능', extra.join(' · ')]);
     items.push(['기록 보관', keepDays() + '일']);
     if (EDIT && expiresAt) items.push(['자동 삭제 예정', new Date(expiresAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ` (출석·새 회차·저장할 때마다 ${keepDays()}일 뒤로 늦춰져요)`]);

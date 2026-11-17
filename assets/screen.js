@@ -679,7 +679,7 @@
   let pollNow = null;
   const isTalk = () => mode === 'qna' || mode === 'poll';
   const modeSuffix = () => isOutMode() ? ' · 퇴실 받는 중' : mode === 'survey' ? ' · 만족도 조사 중' + (surveyN ? ` · 응답 ${surveyN}명` : '') : mode === 'qna' ? ' · 질문 받는 중' : mode === 'poll' ? ' · 질문 던지는 중' : '';
-  function setSession(s) { sessionId = s.id; sessionLabel = s.label; $('session').textContent = s.label + modeSuffix(); }
+  function setSession(s) { if (sessionId && sessionId !== s.id) { groupsNow = null; groupsDraft = null; winners = []; } sessionId = s.id; sessionLabel = s.label; $('session').textContent = s.label + modeSuffix(); }
   // 입실/퇴실 받기 화면 바꾸기
   function applyMode(m, pid) {
     const wasTalk = isTalk();
@@ -703,7 +703,8 @@
     const sv = $('aSurvey'); if (sv) { sv.hidden = isTalk() || (!(cfg.survey && cfg.survey.on) && mode !== 'survey'); sv.textContent = mode === 'survey' ? '출석 받기로 돌아가기' : '만족도 받기 시작'; }
     const qa = $('aQna'); if (qa) { qa.hidden = !(cfg.qna && cfg.qna.on) && mode !== 'qna'; qa.textContent = mode === 'qna' ? '출석 받기로 돌아가기' : '💬 질문 받기'; }
     const pl = $('aPoll'); if (pl) { pl.hidden = !(cfg.poll && cfg.poll.on) && mode !== 'poll'; pl.textContent = mode === 'poll' ? '출석 받기로 돌아가기' : '☁️ 질문 던지기'; }
-    const lo = $('aLottery'); if (lo) lo.hidden = !cfg.lottery;
+    const lo = $('aLottery'); if (lo) lo.hidden = false;   // 뽑기는 언제나 쓸 수 있다
+    const gp = $('aGroups'); if (gp) gp.hidden = !(cfg.groups && cfg.groups.on);
   }
   // 새로 퇴실한 사람: 칸 불을 끄고 "수고하셨습니다" 배너
   let leaveQ = [], leaving = false;
@@ -935,38 +936,167 @@
     if (on && !(await A.dialog({ title: '💬 질문 받기 시작', message: '같은 QR을 찍으면 질문을 보낼 수 있어요.\n강의실 화면이 질문 판으로 바뀌고, 👍 많은 질문이 위로 올라가요.', ok: '질문 받기 시작' }))) return;
     setTalkMode(on ? 'qna' : 'in');
   }
-  /* 글주임 경품 추첨: 이번 회차 출석자 중에서. 이름이 돌다가 멈추고 '당첨' 도장이 쾅 */
-  let winners = [];
+  /* 🎲 뽑기: 경품 추첨·발표자 정하기 등 '한 사람 랜덤으로 고르기'. 이름이 돌다가 멈추고 도장이 쾅 */
+  const PICK_KINDS = { prize: ['🎁 경품 추첨', '당첨', '당첨'], talk: ['🎤 발표자 뽑기', '발표!', '발표자'], any: ['🎲 그냥 한 명', '뽑힘', '뽑힌 사람'] };
+  let winners = [], pickKind = 'prize', pickFrom = 'all', quizPool = null;
   function lottery() {
     let el = $('lot');
     if (!el) {
       el = document.createElement('div'); el.className = 'lot'; el.id = 'lot';
-      el.innerHTML = `<div class="lot-box"><img class="lot-cast" src="assets/defaults/geuljuim_attend.png" alt=""><h2>🎁 경품 추첨</h2><p class="lot-pool" id="lotPool"></p>
+      el.innerHTML = `<div class="lot-box"><img class="lot-cast" src="assets/defaults/geuljuim_attend.png" alt=""><h2>🎲 뽑기</h2>
+        <div class="lot-kinds" id="lotKinds">${Object.entries(PICK_KINDS).map(([k, v]) => `<button type="button" data-lk="${k}">${v[0]}</button>`).join('')}</div>
+        <div class="lot-from" id="lotFrom"></div><p class="lot-pool" id="lotPool"></p>
         <div class="lot-reel"><span class="lot-dept" id="lotDept">&nbsp;</span><b class="lot-name" id="lotName">?</b><span class="lot-stamp" id="lotStamp">당첨</span></div>
-        <div class="lot-btns"><button type="button" class="lot-go" id="lotGo">추첨하기</button><button type="button" class="lot-x" id="lotX">닫기</button></div><p class="lot-win" id="lotWin"></p></div>`;
+        <div class="lot-btns"><button type="button" class="lot-go" id="lotGo">뽑기</button><button type="button" class="lot-x" id="lotReset">처음부터</button><button type="button" class="lot-x" id="lotX">닫기</button></div><p class="lot-win" id="lotWin"></p></div>`;
       document.body.appendChild(el);
       $('lotX').onclick = () => { el.hidden = true; };
       $('lotGo').onclick = spin;
+      $('lotReset').onclick = () => { winners = []; $('lotName').textContent = '?'; $('lotDept').innerHTML = '&nbsp;'; $('lotStamp').classList.remove('hit'); $('lotGo').textContent = '뽑기'; poolText(); };
+      $('lotKinds').onclick = e => { const b = e.target.closest('[data-lk]'); if (b) { pickKind = b.dataset.lk; lotUi(); } };
+      $('lotFrom').onclick = e => { const b = e.target.closest('[data-lf]'); if (b) { pickFrom = b.dataset.lf; lotUi(); } };
     }
-    el.hidden = false; poolText();
+    el.hidden = false; lotUi(); loadQuizPool();
   }
-  const pool = () => lastList.map(x => byNo.get(x.no)).filter(p => p && !winners.includes(p.no));
-  function poolText() { $('lotPool').textContent = `이번 회차 출석자 ${lastList.length}명 중${winners.length ? ` (당첨된 ${winners.length}명 빼고)` : ''}`; $('lotWin').textContent = winners.length ? '당첨: ' + winners.map(no => (byNo.get(no) || {}).name).join(', ') : ''; }
+  // 마지막 퀴즈(정답이 있는 보기 고르기, 이름이 남는 질문)를 맞힌 사람
+  async function loadQuizPool() {
+    quizPool = null;
+    try {
+      const d = await A.rpc('export_talk', { p_id: eventId, p_token: token });
+      const qz = (d && d.polls || []).filter(p => p.session_id === sessionId && p.summary && p.summary.kind === 'choice' && p.summary.answer != null && !p.anon).pop();
+      if (qz) quizPool = { q: qz.q, nos: qz.answers.filter(a => a.no != null && +(a.words || [])[0] === qz.summary.answer).map(a => a.no) };
+    } catch (e) {}
+    lotUi();
+  }
+  function lotUi() {
+    if (!$('lot')) return;
+    $('lotKinds').querySelectorAll('[data-lk]').forEach(b => b.classList.toggle('on', b.dataset.lk === pickKind));
+    const opts = [['all', '이번 회차 출석자']];
+    if (quizPool) opts.push(['quiz', `퀴즈 정답자 (${quizPool.nos.length}명)`]);
+    if (groupsNow) opts.push(['group', '조마다 한 명씩']);
+    if (!opts.some(o => o[0] === pickFrom)) pickFrom = 'all';
+    $('lotFrom').innerHTML = opts.length > 1 ? opts.map(([k, t]) => `<button type="button" data-lf="${k}" class="${k === pickFrom ? 'on' : ''}">${A.esc(t)}</button>`).join('') : '';
+    $('lotStamp').textContent = PICK_KINDS[pickKind][1];
+    poolText();
+  }
+  const pool = () => {
+    const base = pickFrom === 'quiz' && quizPool ? quizPool.nos.map(no => byNo.get(no)) : lastList.map(x => byNo.get(x.no));
+    return base.filter(p => p && !winners.includes(p.no));
+  };
+  function poolText() {
+    const n = pool().length, label = PICK_KINDS[pickKind][2];
+    $('lotPool').textContent = pickFrom === 'group' ? `${groupsNow.names.length}개 조에서 한 명씩` : `${pickFrom === 'quiz' ? '퀴즈 정답자' : '이번 회차 출석자'} 중 ${n}명에서${winners.length ? ` (이미 뽑힌 ${winners.length}명 빼고)` : ''}`;
+    $('lotWin').textContent = winners.length ? label + ': ' + winners.map(no => (byNo.get(no) || {}).name).join(', ') : '';
+  }
   function spin() {
-    const ps = pool(); if (!ps.length) { A.toast('추첨할 출석자가 없어요', 'bad'); return; }
+    if (pickFrom === 'group') return spinGroups();
+    const ps = pool(); if (!ps.length) { A.toast(winners.length ? '모두 뽑혔어요. [처음부터]를 눌러 주세요' : '뽑을 사람이 없어요', 'bad'); return; }
     const go = $('lotGo'), stamp = $('lotStamp'); go.disabled = true; stamp.classList.remove('hit');
     const win = ps[Math.floor(Math.random() * ps.length)]; let t = 0, k = 0; const total = 3200;
     const tick = () => {
       const p = t >= total ? win : ps[(k++) % ps.length];
-      $('lotName').textContent = p.name; $('lotDept').textContent = p.dept || '\u00a0';
+      $('lotName').textContent = p.name; $('lotName').classList.remove('small'); $('lotDept').textContent = p.dept || ' ';
       try { if (t < total) Sound.sfx('land'); } catch (e) {}
       if (t >= total) {
-        void stamp.offsetWidth; stamp.classList.add('hit'); winners.push(win.no); poolText(); go.disabled = false; go.textContent = '한 번 더';
+        void stamp.offsetWidth; stamp.classList.add('hit'); winners.push(win.no); poolText(); go.disabled = false; go.textContent = '한 명 더';
         try { Sound.sfx('milestone', { pct: 90 }); } catch (e) {} A.confetti({ count: 120 }); return;
       }
       const d = 50 + 380 * Math.pow(t / total, 2.4); t += d; setTimeout(tick, d);
     };
     tick();
+  }
+  // 조마다 한 명씩: 조 이름 옆에 뽑힌 사람을 한 줄씩
+  function spinGroups() {
+    const G = groupsNow; if (!G) return;
+    const picks = G.names.map((nm, i) => { const ms = Object.keys(G.map).filter(no => G.map[no] === i).map(Number).filter(no => !winners.includes(no)); return [nm, ms.length ? ms[Math.floor(Math.random() * ms.length)] : null]; });
+    picks.forEach(([, no]) => { if (no != null) winners.push(no); });
+    $('lotName').textContent = '조별로 한 명씩!'; $('lotName').classList.add('small'); $('lotDept').textContent = PICK_KINDS[pickKind][2];
+    $('lotWin').innerHTML = picks.map(([nm, no]) => `<span class="lot-gp"><b>${A.esc(nm)}</b> ${no != null ? A.esc((byNo.get(no) || {}).name || '') : '-'}</span>`).join('');
+    const stamp = $('lotStamp'); stamp.classList.remove('hit'); void stamp.offsetWidth; stamp.classList.add('hit');
+    try { Sound.sfx('milestone', { pct: 90 }); } catch (e) {} A.confetti({ count: 100 });
+  }
+
+  /* 🧩 조 편성: 이번 회차 출석자를 몇 개 조로 섞는다. 같은 부서는 되도록 흩어지게. [휴대폰에 알리기]를 누르면 각자 휴대폰에 '○조' */
+  let groupsNow = null, groupsDraft = null;
+  function shuffleArr(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  function makeGroups(people, n, spread) {
+    const gs = Array.from({ length: n }, () => []);
+    let order;
+    if (spread) {   // 부서별로 묶어 큰 부서부터, 가장 적은 조(그 부서가 덜 들어간 조)에 하나씩
+      const by = new Map(); shuffleArr(people.slice()).forEach(p => { const k = p.dept || ''; if (!by.has(k)) by.set(k, []); by.get(k).push(p); });
+      order = [...by.values()].sort((a, b) => b.length - a.length).flat();
+      order.forEach(p => {
+        let best = 0, bs = Infinity;
+        gs.forEach((g, i) => { const sc = g.length * 100 + g.filter(q => (q.dept || '') === (p.dept || '')).length * 1000 + Math.random(); if (sc < bs) { bs = sc; best = i; } });
+        gs[best].push(p);
+      });
+    } else { shuffleArr(people.slice()).forEach((p, i) => gs[i % n].push(p)); }
+    return gs;
+  }
+  async function groupsOpen() {
+    let el = $('grpBox');
+    if (!el) {
+      el = document.createElement('div'); el.className = 'lot grp-ov'; el.id = 'grpBox';
+      el.innerHTML = `<div class="grp-box"><header><h2>🧩 조 편성</h2><span id="grpInfo"></span>
+          <label>조 수 <select id="grpN">${Array.from({ length: 19 }, (_, i) => `<option value="${i + 2}">${i + 2}개 조</option>`).join('')}</select></label>
+          <label class="grp-chk"><input type="checkbox" id="grpSpread" checked> 같은 부서는 흩어지게</label>
+          <button type="button" id="grpMix" class="lot-go">🔀 섞기</button><button type="button" id="grpSave" class="grp-save">📱 휴대폰에 알리기</button><button type="button" id="grpX" class="lot-x">닫기</button></header>
+        <p class="grp-tip" id="grpTip"></p><div class="grp-cols" id="grpCols"></div></div>`;
+      document.body.appendChild(el);
+      $('grpX').onclick = () => { el.hidden = true; };
+      $('grpMix').onclick = mixGroups;
+      $('grpSave').onclick = saveGroups;
+    }
+    el.hidden = false;
+    const n = lastList.length;
+    $('grpInfo').textContent = `이번 회차 출석자 ${n}명`;
+    $('grpN').value = String(Math.max(2, Math.min(20, Math.round(n / 5) || 2)));
+    if (!groupsNow) { try { const g = await A.rpc('get_groups', { p_id: eventId, p_token: token }); if (g && g.map) groupsNow = { names: g.names, map: Object.fromEntries(Object.entries(g.map).map(([k, v]) => [k, +v])) }; } catch (e) {} }
+    if (groupsNow) { groupsDraft = groupsNow; $('grpN').value = String(groupsNow.names.length); renderGroups(true); }
+    else { groupsDraft = null; $('grpCols').innerHTML = `<p class="grp-empty">조 수를 고르고 <b>🔀 섞기</b>를 눌러 주세요.${n < 2 ? '<br>(출석한 사람이 두 명 이상이어야 해요)' : ''}</p>`; $('grpTip').textContent = ''; }
+  }
+  function mixGroups() {
+    const people = lastList.map(x => byNo.get(x.no)).filter(Boolean), n = Math.min(+$('grpN').value, people.length);
+    if (people.length < 2) { A.toast('출석한 사람이 두 명 이상이어야 해요', 'bad'); return; }
+    const gs = makeGroups(people, n, $('grpSpread').checked);
+    const map = {}; gs.forEach((g, i) => g.forEach(p => { map[p.no] = i; }));
+    groupsDraft = { names: gs.map((_, i) => `${i + 1}조`), map };
+    try { Sound.sfx('land'); } catch (e) {}
+    renderGroups(false);
+  }
+  function renderGroups(saved) {
+    const G = groupsDraft; if (!G) return;
+    const cols = G.names.map((nm, i) => ({ nm, ms: Object.keys(G.map).filter(no => G.map[no] === i).map(no => byNo.get(+no)).filter(Boolean) }));
+    const max = Math.max(...cols.map(c => c.ms.length));
+    $('grpCols').style.setProperty('--n', cols.length);
+    $('grpCols').style.setProperty('--fs', Math.max(1.4, Math.min(3, 26 / Math.max(max, 6))) + 'vh');
+    $('grpCols').innerHTML = cols.map((c, i) => `<section class="grp-col" style="--d:${i * 60}ms"><h3>${A.esc(c.nm)} <small>${c.ms.length}명</small></h3>${c.ms.map(p => `<p><b>${A.esc(p.name)}</b><span>${A.esc(p.dept || '')}</span></p>`).join('')}</section>`).join('');
+    const same = groupsNow && JSON.stringify(groupsNow.map) === JSON.stringify(G.map);
+    $('grpTip').textContent = saved || same ? '✅ 휴대폰에 알렸어요. 출석한 휴대폰 화면 아래에 내 조가 떠요.' : '마음에 들면 [📱 휴대폰에 알리기]를 눌러 주세요. 다시 섞어도 돼요.';
+    $('grpSave').disabled = !!(saved || same);
+  }
+  async function saveGroups() {
+    if (!groupsDraft) { A.toast('먼저 섞어 주세요', 'bad'); return; }
+    try {
+      await A.rpc('set_groups', { p_id: eventId, p_token: token, p_groups: { names: groupsDraft.names, map: groupsDraft.map } });
+      groupsNow = groupsDraft; renderGroups(true); A.toast('휴대폰에 조를 알렸어요', 'ok'); A.confetti({ count: 80 });
+    } catch (e) { A.toast(talkFnMsg(e, '조 편성'), 'bad'); }
+  }
+  /* 📝 결과보고서 초안(한글): 출석·만족도·질문 기록을 모아 단면 보고서 HWPX를 내려받는다 */
+  const loadScript = src => new Promise((res, rej) => { const t = document.createElement('script'); t.src = src; t.onload = res; t.onerror = () => rej(new Error('보고서 기능을 불러오지 못했어요')); document.head.appendChild(t); });
+  let reportLoading = null;
+  async function makeReport() {
+    try {
+      reportLoading = reportLoading || Promise.all([window.fflate ? 0 : loadScript('assets/fflate.min.js?v=20261118'), window.Report ? 0 : loadScript('assets/report.js?v=20261118')]);
+      await reportLoading;
+      A.toast('보고서를 만드는 중…', 'ok');
+      const { d, all } = await exportData();
+      let talk = { questions: [], polls: [] };
+      try { const t = await A.rpc('export_talk', { p_id: eventId, p_token: token }); if (t) talk = t; } catch (e) {}
+      const { bytes, spec } = await Report.build({ cfg, sessions: d.sessions, attendance: d.attendance, all, roster, responses: d.responses || [], talk });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/hwp+zip' }));
+      window.__lastReport = spec; a.download = `${fileSafe(cfg.title)}_결과보고(초안).hwpx`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      A.toast('결과보고서 초안을 받았어요. 한글에서 ○○ 부분을 채워 주세요', 'ok');
+    } catch (e) { reportLoading = null; A.toast(e.message || '보고서를 만들지 못했어요', 'bad'); }
   }
   async function exportAll() {
     try {
@@ -1082,7 +1212,8 @@
     more.onclick = e => { e.stopPropagation(); menu.hidden = !menu.hidden; more.setAttribute('aria-expanded', String(!menu.hidden)); };
     menu.addEventListener('click', () => setTimeout(closeMenu, 0)); addEventListener('click', e => { if (!e.target.closest('#adminBar')) closeMenu(); });
     $('aPhone').onclick = () => A.phoneOpen(eventId, token);
-    $('aSurvey').onclick = toggleSurvey; $('aLottery').onclick = lottery;
+    $('aSurvey').onclick = toggleSurvey; $('aLottery').onclick = lottery; $('aGroups').onclick = groupsOpen;
+    $('aReport').onclick = makeReport;
     $('aQna').onclick = toggleQna; $('aPoll').onclick = () => mode === 'poll' ? setTalkMode('in') : Talk.startPoll();
     // 휴대폰으로 열었으면: 큰 화면 대신 미참석자 목록부터 보여 준다
     if (new URLSearchParams(location.search).get('phone') || matchMedia('(max-width: 760px)').matches) {

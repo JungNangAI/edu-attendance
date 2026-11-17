@@ -222,16 +222,18 @@
         </div>
       </div>
       <div class="opt-sec">
-        <label class="check big"><input type="checkbox" data-k="poll.on" id="pollOn"> 질문 던지기 (워드클라우드) <span class="hint-inline">강사 → 참석자, 답이 낱말 구름으로</span></label>
+        <label class="check big"><input type="checkbox" data-k="poll.on" id="pollOn"> 질문 던지기 (워드클라우드·투표·퀴즈) <span class="hint-inline">강사 → 참석자</span></label>
         <div id="pollBox" class="opt-box">
           <label class="check"><input type="checkbox" data-k="poll.anon"> 익명으로 받기 (끄면 엑셀에 이름이 붙고, 출석한 휴대폰만 답할 수 있어요)</label>
           <div class="field"><label class="f" for="pollMax">한 사람이 낼 수 있는 낱말</label><select id="pollMax" data-k="poll.max"><option value="1">1개</option><option value="2">2개</option><option value="3">3개</option><option value="5">5개</option></select></div>
-          <div class="field"><label class="f" for="pollPrep">미리 써 둘 질문 (한 줄에 하나, 선택)</label><textarea id="pollPrep" data-k="poll.prepared" rows="3" maxlength="1200" placeholder="예: AI 하면 떠오르는 낱말은?&#10;오늘 교육에서 기억에 남는 한 가지는?"></textarea></div>
-          <p class="hint">강의실 화면의 <b>질문 던지기</b>에서 미리 쓴 질문을 고르거나 그 자리에서 써요. 출석한 휴대폰에는 질문이 저절로 떠요. 답은 많이 나온 낱말일수록 크게 보여요.</p>
+          <div class="field"><label class="f" for="pollPrep">미리 써 둘 질문 (한 줄에 하나, 선택)</label><textarea id="pollPrep" data-k="poll.prepared" rows="3" maxlength="1200" placeholder="AI 하면 떠오르는 낱말은?&#10;점심 메뉴는? | 김밥 | 국수 | 비빔밥&#10;생성형 AI에 넣으면 안 되는 것은? | 공개 보도자료 | *주민등록번호 | 행사 안내문&#10;한줄: 오늘 교육 한 줄 소감은?"></textarea></div>
+          <p class="hint">한 줄에 질문 하나. <b>그냥 쓰면</b> 낱말(워드클라우드), <b>| 로 보기를 이으면</b> 보기 고르기(막대그래프), 정답 보기 앞에 <b>*</b>를 붙이면 퀴즈, 앞에 <b>한줄:</b>을 붙이면 한 줄 답(카드)이에요.</p>
+          <p class="hint">강의실 화면의 <b>질문 던지기</b>에서 미리 쓴 질문을 고르거나 그 자리에서 써요. 답 받는 방식은 셋이에요. <b>☁️ 낱말</b>은 워드클라우드, <b>📊 보기 고르기</b>는 막대그래프(퀴즈면 [정답 공개]), <b>💬 한 줄 답</b>은 카드로 모여요. 화면의 [막대 ↔ 구름] 버튼으로 보는 모양을 바꿀 수 있어요. 출석한 휴대폰에는 질문이 저절로 떠요.</p>
         </div>
       </div>
       <div class="opt-sec">
-        <label class="check big"><input type="checkbox" data-k="lottery"> 경품 추첨 쓰기 <span class="hint-inline">강의실 화면 [더보기]에 추첨 버튼</span></label>
+        <label class="check big"><input type="checkbox" data-k="groups.on"> 🧩 조 편성 쓰기 <span class="hint-inline">워크숍·실습, 출석한 사람을 조로 섞기</span></label>
+        <p class="hint">강의실 화면 [더보기] → <b>🧩 조 편성</b>에서 조 수를 고르고 섞으면, 같은 부서는 되도록 다른 조로 흩어져요. <b>휴대폰에 알리기</b>를 누르면 출석한 휴대폰 화면 아래에 "나는 ○조"가 떠요.<br>경품 추첨·발표자 정하기는 따로 켜지 않아도 [더보기] → <b>🎲 뽑기</b>로 언제든 쓸 수 있어요.</p>
       </div>
     </section>
 
@@ -273,8 +275,8 @@
 <script src="config.js"></script>
 <script src="assets/qrcode.js?v=20261115"></script>
 <script src="assets/xlsx.full.min.js?v=20261115"></script>
-<script src="assets/common.js?v=20261117b"></script>
+<script src="assets/common.js?v=20261118"></script>
 <script src="assets/cert.js?v=20261115"></script>
-<script src="assets/admin.js?v=20261117e"></script>
+<script src="assets/admin.js?v=20261118"></script>
 </body>
 </html>

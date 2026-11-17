@@ -1093,6 +1093,170 @@ end $$;
 
 -- ---------- 함수 실행 권한 ----------
 revoke execute on all functions in schema public from public;
+-- =====================================================================
+-- 질문 던지기 답 방식(낱말·보기 고르기·한 줄 답) · 퀴즈 정답 · 조 편성  (나중에 추가된 것. 다시 실행해도 된다)
+--   polls.kind   : word 낱말(워드클라우드) / choice 보기 고르기(막대그래프) / text 한 줄 답(카드)
+--   polls.choices: 보기 목록, polls.answer: 정답 보기 번호(0부터, 없으면 null), polls.reveal: 정답 공개
+--   sessions.groups: {n, names:[..], map:{"사람 번호": 조 번호(0부터)}}
+-- =====================================================================
+alter table polls add column if not exists kind    text    not null default 'word';
+alter table polls add column if not exists choices jsonb   not null default '[]'::jsonb;
+alter table polls add column if not exists answer  int;
+alter table polls add column if not exists reveal  boolean not null default false;
+alter table sessions add column if not exists groups jsonb;
+
+-- p_hidden: 담당자용(숨긴 낱말·정답까지 모두)
+create or replace function _poll_json(p polls, p_hidden boolean) returns jsonb
+language sql stable security definer set search_path = public, extensions as $$
+  select jsonb_build_object('id', p.id, 'q', p.q, 'open', p.is_open, 'anon', p.anon, 'max', p.max_words, 'hidden', p.hidden,
+    'kind', p.kind, 'choices', p.choices, 'reveal', p.reveal, 'quiz', p.answer is not null,
+    'answer', case when p_hidden or p.reveal then p.answer end,
+    'n', (select count(*) from poll_answers a where a.poll_id = p.id),
+    'counts', case when p.kind = 'choice' then (
+        select coalesce(jsonb_agg((select count(*) from poll_answers a where a.poll_id = p.id and a.words->>0 = (i - 1)::text) order by i), '[]'::jsonb)
+          from generate_series(1, jsonb_array_length(p.choices)) i) end,
+    'texts', case when p.kind = 'text' then coalesce((
+        select jsonb_agg(t order by at desc) from (
+          select a.words->>0 as t, a.created_at as at from poll_answers a
+           where a.poll_id = p.id and (p_hidden or not (p.hidden ? (a.words->>0)))
+           order by a.created_at desc limit 150) x), '[]'::jsonb) end,
+    'words', case
+      when p.kind = 'choice' then coalesce((
+        select jsonb_agg(jsonb_build_array(p.choices->>(i - 1), c) order by c desc) from (
+          select i, (select count(*) from poll_answers a where a.poll_id = p.id and a.words->>0 = (i - 1)::text) as c
+            from generate_series(1, jsonb_array_length(p.choices)) i) t where c > 0), '[]'::jsonb)
+      when p.kind = 'text' then '[]'::jsonb
+      else coalesce((select jsonb_agg(jsonb_build_array(w, c) order by c desc, w) from (
+        select x #>> '{}' as w, count(*) as c from poll_answers a, jsonb_array_elements(a.words) x
+         where a.poll_id = p.id and (p_hidden or not (p.hidden ? (x #>> '{}')))
+         group by 1 order by 2 desc, 1 limit 200) t), '[]'::jsonb) end);
+$$;
+
+-- 답 방식을 골라 던지기. 예전 start_poll(낱말)도 그대로 쓸 수 있다
+create or replace function start_poll2(p_id uuid, p_token text, p_q text, p_kind text, p_choices jsonb, p_answer int) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; q text; pid bigint; mx int; ch jsonb := '[]'::jsonb; k text;
+begin
+  e := _admin(p_id, p_token);
+  q := _clean_text(p_q, 120);
+  if q = '' then raise exception '질문을 써 주세요'; end if;
+  k := coalesce(nullif(p_kind, ''), 'word');
+  if k not in ('word', 'choice', 'text') then raise exception '잘못된 값'; end if;
+  if k = 'choice' then
+    if jsonb_typeof(p_choices) <> 'array' then raise exception '보기를 써 주세요'; end if;
+    select coalesce(jsonb_agg(c order by o), '[]'::jsonb) into ch from (
+      select _clean_text(x #>> '{}', 40) as c, o from jsonb_array_elements(p_choices) with ordinality t(x, o)
+       where jsonb_typeof(x) = 'string' limit 8) s where c <> '';
+    if jsonb_array_length(ch) < 2 then raise exception '보기를 두 개 이상 써 주세요'; end if;
+    if p_answer is not null and (p_answer < 0 or p_answer >= jsonb_array_length(ch)) then raise exception '정답 보기를 다시 골라 주세요'; end if;
+  end if;
+  mx := greatest(1, least(5, coalesce(nullif(e.config->'poll'->>'max', '')::int, 3)));
+  update polls set is_open = false where session_id = e.current_session and is_open;
+  insert into polls(event_id, session_id, q, anon, max_words, kind, choices, answer)
+    values (p_id, e.current_session, q, coalesce(e.config->'poll'->>'anon', 'true') <> 'false', mx, k, ch,
+            case when k = 'choice' then p_answer end) returning id into pid;
+  update sessions set poll_id = pid, mode = 'poll' where id = e.current_session;
+  perform _touch(p_id);
+  return get_board(p_id);
+end $$;
+
+-- 퀴즈 정답 공개/가리기
+create or replace function reveal_poll(p_id uuid, p_token text, p_poll bigint, p_reveal boolean) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare p polls;
+begin
+  perform _admin(p_id, p_token);
+  update polls set reveal = coalesce(p_reveal, false) where id = p_poll and event_id = p_id returning * into p;
+  if p.id is null then raise exception '없는 질문이에요'; end if;
+  return _poll_json(p, true);
+end $$;
+
+-- 휴대폰·강의실 화면이 몇 초마다 묻는다. 내 답(mine)과 내 조(group)도 함께
+create or replace function get_poll(p_id uuid, p_poll bigint, p_device text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; p polls; k text; s sessions; g jsonb := null; me int; mine jsonb := null;
+begin
+  select * into e from events where id = p_id and expires_at >= now();
+  if e.id is null then return null; end if;
+  select * into s from sessions where id = e.current_session;
+  if s.groups is not null and p_device is not null then
+    me := _my_no(e, p_device);
+    if me is not null and s.groups->'map' ? me::text then
+      g := jsonb_build_object('i', (s.groups->'map'->>me::text)::int, 'n', s.groups->'n',
+                              'name', s.groups->'names'->>((s.groups->'map'->>me::text)::int), 'at', s.groups->'at');
+    end if;
+  end if;
+  select * into p from polls where event_id = p_id and id = coalesce(p_poll, s.poll_id);
+  if p.id is null then return jsonb_build_object('mode', s.mode, 'poll', null, 'group', g); end if;
+  k := _qkey(p_device, 'poll', e.id);
+  if k is not null then select a.words into mine from poll_answers a where a.poll_id = p.id and a.rkey = k; end if;
+  return jsonb_build_object('mode', s.mode, 'poll', _poll_json(p, false), 'answered', mine is not null, 'mine', mine, 'group', g);
+end $$;
+
+create or replace function answer_poll(p_id uuid, p_device text, p_poll bigint, p_words jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; p polls; k text; ws jsonb; me int; t text; ci int;
+begin
+  select * into e from events where id = p_id and expires_at >= now();
+  if e.id is null then return jsonb_build_object('status', 'error', 'message', '행사를 찾을 수 없습니다'); end if;
+  select * into p from polls where id = p_poll and event_id = p_id;
+  if p.id is null then return jsonb_build_object('status', 'error', 'message', '없는 질문이에요'); end if;
+  if not p.is_open then return jsonb_build_object('status', 'error', 'code', 'closed', 'message', '답을 그만 받았어요'); end if;
+  k := _qkey(p_device, 'poll', e.id);
+  if k is null then return jsonb_build_object('status', 'error', 'message', '화면을 새로고침한 뒤 다시 해 주세요'); end if;
+  if exists (select 1 from poll_answers where poll_id = p.id and rkey = k) then return jsonb_build_object('status', 'dup'); end if;
+  if (select count(*) from poll_answers where poll_id = p.id) >= 1000 then return jsonb_build_object('status', 'error', 'message', '답이 너무 많아요(1,000명까지)'); end if;
+  if jsonb_typeof(p_words) <> 'array' then return jsonb_build_object('status', 'error', 'message', '답을 써 주세요'); end if;
+  if p.kind = 'choice' then
+    begin ci := (p_words->>0)::int; exception when others then ci := null; end;
+    if ci is null or ci < 0 or ci >= jsonb_array_length(p.choices) then return jsonb_build_object('status', 'error', 'message', '보기를 하나 골라 주세요'); end if;
+    ws := jsonb_build_array(ci::text);
+  elsif p.kind = 'text' then
+    t := _clean_text(p_words->>0, 80);
+    if char_length(t) < 1 then return jsonb_build_object('status', 'error', 'message', '답을 써 주세요'); end if;
+    if _bad(t) then return jsonb_build_object('status', 'error', 'message', '화면에 띄우기 어려운 말이 있어요. 고쳐서 보내 주세요'); end if;
+    ws := jsonb_build_array(_mask_nums(t));
+  else
+    select coalesce(jsonb_agg(distinct w), '[]'::jsonb) into ws from (
+      select left(_word(x #>> '{}'), 15) as w from jsonb_array_elements(p_words) x
+       where jsonb_typeof(x) = 'string' limit p.max_words) t
+     where w <> '' and not _bad(w);
+    if jsonb_array_length(ws) = 0 then return jsonb_build_object('status', 'error', 'message', '낱말을 써 주세요'); end if;
+  end if;
+  if not p.anon then
+    me := _my_no(e, p_device);
+    if me is null then return jsonb_build_object('status', 'error', 'code', 'notin', 'message', '이번 회차에 이 휴대폰으로 출석한 사람만 답할 수 있어요'); end if;
+  end if;
+  insert into poll_answers(poll_id, event_id, person_no, rkey, words) values (p.id, e.id, me, k, ws) on conflict do nothing;
+  perform _touch(e.id);
+  return jsonb_build_object('status', 'ok');
+end $$;
+
+-- 조 편성 저장(강의실 화면에서 섞은 결과). p_groups가 null이면 지운다
+create or replace function set_groups(p_id uuid, p_token text, p_groups jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; n int;
+begin
+  e := _admin(p_id, p_token);
+  if p_groups is null then update sessions set groups = null where id = e.current_session; return jsonb_build_object('status', 'ok'); end if;
+  if jsonb_typeof(p_groups->'map') <> 'object' or jsonb_typeof(p_groups->'names') <> 'array' or length(p_groups::text) > 200000 then raise exception '잘못된 값'; end if;
+  n := jsonb_array_length(p_groups->'names');
+  if n < 1 or n > 60 then raise exception '조는 1~60개까지예요'; end if;
+  update sessions set groups = jsonb_build_object('n', n, 'names', p_groups->'names', 'map', p_groups->'map', 'at', now())
+   where id = e.current_session;
+  perform _touch(p_id);
+  return jsonb_build_object('status', 'ok');
+end $$;
+
+-- 강의실 화면을 다시 열었을 때 이번 회차 조 편성 불러오기
+create or replace function get_groups(p_id uuid, p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events;
+begin
+  e := _admin(p_id, p_token);
+  return (select groups from sessions where id = e.current_session);
+end $$;
+
 do $$
 declare f text;
 begin
@@ -1108,7 +1272,8 @@ begin
     'ask_question(uuid,text,text,boolean)', 'like_question(uuid,text,bigint)', 'get_questions(uuid,text,text)',
     'set_question(uuid,text,bigint,text)', 'start_poll(uuid,text,text)', 'open_poll(uuid,text,bigint,boolean)',
     'hide_word(uuid,text,bigint,text,boolean)', 'get_poll(uuid,bigint,text)', 'answer_poll(uuid,text,bigint,jsonb)',
-    'export_talk(uuid,text)', 'join_anon(uuid,text,text)']
+    'export_talk(uuid,text)', 'join_anon(uuid,text,text)',
+    'start_poll2(uuid,text,text,text,jsonb,int)', 'reveal_poll(uuid,text,bigint,boolean)', 'set_groups(uuid,text,jsonb)', 'get_groups(uuid,text)']
   loop
     if exists (select 1 from pg_roles where rolname = 'anon') then
       execute format('grant execute on function %s to anon', f);

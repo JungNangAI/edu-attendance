@@ -171,6 +171,33 @@ body.phone-admin .ab-list a{font-size:17px;font-weight:700;padding:4px 8px}
 .lot-go{background:#ffd43b;color:#222b45;box-shadow:0 5px 0 #c9a21a}.lot-go:active{transform:translateY(4px);box-shadow:0 1px 0 #c9a21a}.lot-go:disabled{opacity:.6}
 .lot-x{background:#e6e8ef;color:#222b45}
 .lot-win{margin:14px 0 0;color:#4a5068;font-size:15px}
+.lot-kinds,.lot-from{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+.lot-kinds button,.lot-from button{font:inherit;font-weight:700;font-size:15px;border:1.5px solid #d9dce5;background:#fff;color:#222b45;border-radius:99px;padding:8px 14px;cursor:pointer}
+.lot-from button{font-size:13px;padding:6px 12px}
+.lot-kinds button.on,.lot-from button.on{background:#222b45;border-color:#222b45;color:#ffd43b}
+.lot-from:empty{display:none}
+.lot-gp{display:inline-block;background:#fff;border:1.5px solid #e6e8ef;border-radius:10px;padding:6px 10px;margin:4px;font-size:16px}
+.lot-gp b{color:#7048e8}
+.grp-ov{place-items:stretch;padding:3vh 3vw}
+.grp-box{background:#fffaf0;color:#222b45;border-radius:24px;padding:20px 24px;display:flex;flex-direction:column;min-height:0;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.grp-box header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.grp-box h2{margin:0;font-size:clamp(22px,2.6vw,34px)}
+.grp-box header > span{color:#4a5068;font-size:15px;margin-right:auto}
+.grp-box label{font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.lot-name.small{font-size:clamp(32px,4.4vw,56px);padding-right:110px}
+.lot-win .lot-gp{font-size:18px}
+.grp-box select{font:inherit;padding:6px 8px;border-radius:8px;border:1.5px solid #d9dce5}
+.grp-box header button{font:inherit;font-weight:800;font-size:16px;border:0;border-radius:12px;padding:10px 16px;cursor:pointer}
+.grp-save{background:#7048e8;color:#fff}.grp-save:disabled{opacity:.5;cursor:default}
+.grp-tip{margin:8px 0 10px;color:#4a5068;font-size:14px}
+.grp-cols{flex:1;min-height:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(max(150px,calc(100% / min(var(--n,4),6) - 12px)),1fr));gap:12px;overflow:auto;align-content:start}
+.grp-col{background:#fff;border-radius:16px;padding:12px 14px;border-top:6px solid #7048e8;box-shadow:0 4px 14px rgba(20,24,40,.08);animation:tkIn .5s var(--d) both}
+.grp-col:nth-child(5n+2){border-top-color:#1c7ed6}.grp-col:nth-child(5n+3){border-top-color:#f08c00}.grp-col:nth-child(5n+4){border-top-color:#2f9e44}.grp-col:nth-child(5n+5){border-top-color:#e64980}
+.grp-col h3{margin:0 0 6px;font-size:calc(var(--fs) * 1.3)}
+.grp-col h3 small{font-size:.6em;color:#868e96}
+.grp-col p{margin:0;padding:3px 0;font-size:var(--fs);display:flex;gap:6px;align-items:baseline;border-bottom:1px dashed #eef0f6}
+.grp-col p span{font-size:.62em;color:#868e96;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grp-empty{text-align:center;color:#6b7280;font-size:18px;padding:8vh 0}
 
 /* ---------- 질문 받기 · 질문 던지기(워드클라우드) ---------- */
 body.mode-talk .board{display:none}
@@ -226,4 +253,38 @@ body.mode-talk #chip{background:#7048e8;color:#fff}
 .tk-start .tk-prep button{font:inherit;text-align:left;border:1.5px solid #dfe2ea;background:#f7f8fb;border-radius:10px;padding:10px 12px;cursor:pointer}
 .tk-start .tk-prep button:hover{border-color:#7048e8;background:#f3efff}
 .tk-start .app-modal-input{width:100%}
+.tk-start .tk-prep button small{display:block;color:#6b7280;font-size:12px;margin-top:2px}
+.tk-start{max-height:90vh;overflow:auto}
+.tk-kinds{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0}
+.tk-kinds button{font:inherit;border:1.5px solid #dfe2ea;background:#fff;border-radius:10px;padding:8px 6px;cursor:pointer;text-align:center;line-height:1.3}
+.tk-kinds button b{display:block;font-size:14px}
+.tk-kinds button small{display:block;font-size:11px;color:#6b7280}
+.tk-kinds button[aria-checked="true"]{border-color:#7048e8;background:#f3efff;box-shadow:0 0 0 2px #7048e8 inset}
+.tk-chs{margin-top:8px}
+.tk-ch{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.tk-ch input{flex:1;min-width:0;font:inherit;font-size:15px;border:1.5px solid #dfe2ea;border-radius:9px;padding:8px 10px}
+.tk-ch.ans input{border-color:#2f9e44;background:#ebfbee}
+.tk-ans,.tk-chx{flex:none;width:36px;height:36px;border-radius:50%;border:1.5px solid #dfe2ea;background:#fff;cursor:pointer;font:inherit;font-weight:800;color:#868e96}
+.tk-ch.ans .tk-ans{background:#2f9e44;border-color:#2f9e44;color:#fff}
+.tk-chx{border:0;background:transparent}
+.tk-chadd{font:inherit;font-size:14px;border:1.5px dashed #c5cad6;background:#fff;border-radius:9px;padding:7px 12px;cursor:pointer}
+.tk-chtip{font-size:12px;color:#6b7280;margin:6px 0 0}
+.tk-start .err{color:#e03131;font-size:14px;min-height:0;margin:6px 0 0}
+.tk-view{background:#7048e8 !important}
+.tk-bars{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:2.2vh;padding:2vh 3vh;overflow:hidden}
+.tk-bars[hidden],.tk-texts[hidden],.tk-cloud[hidden]{display:none}
+.tk-bar{display:grid;grid-template-columns:minmax(0,34%) 1fr 11vh;align-items:center;gap:2vh;font-size:3.4vh;font-weight:800;transition:opacity .4s}
+.tk-bl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-bl b{color:#2f9e44;font-size:.8em}
+.tk-bt{height:6vh;background:#eef0f6;border-radius:1.4vh;overflow:hidden}
+.tk-bt i{display:block;height:100%;width:var(--w);background:var(--c);border-radius:1.4vh;transition:width .8s cubic-bezier(.2,1,.3,1)}
+.tk-bv{font-variant-numeric:tabular-nums;text-align:right}
+.tk-bv small{display:block;font-size:.55em;color:#6b7280}
+.tk-bar.ok .tk-bt i{background:#2f9e44}
+.tk-bar.ok{color:#2b8a3e}
+.tk-bar.dim{opacity:.45}
+.tk-texts{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(42vh,1fr));gap:1.6vh;align-content:start;padding:1vh 0}
+.tk-tx{background:#fff;border:1px solid #e6e8ef;border-left:1vh solid #7048e8;border-radius:1.4vh;padding:2vh 2.4vh;font-size:2.8vh;font-weight:700;line-height:1.4;word-break:keep-all;overflow-wrap:anywhere;animation:tkIn .5s both;box-shadow:0 .6vh 1.6vh rgba(20,24,40,.06)}
+.tk-tx[data-hidetx]{cursor:pointer}
+.tk-tx:nth-child(4n+2){border-left-color:#1c7ed6}.tk-tx:nth-child(4n+3){border-left-color:#f08c00}.tk-tx:nth-child(4n+4){border-left-color:#2f9e44}
 body.phone-admin .talk{display:none}
