@@ -941,7 +941,7 @@
     let el = $('lot');
     if (!el) {
       el = document.createElement('div'); el.className = 'lot'; el.id = 'lot';
-      el.innerHTML = `<div class="lot-box"><img class="lot-cast" src="assets/defaults/geuljuim_attend.png" alt=""><h2>🎁 글주임 경품 추첨</h2><p class="lot-pool" id="lotPool"></p>
+      el.innerHTML = `<div class="lot-box"><img class="lot-cast" src="assets/defaults/geuljuim_attend.png" alt=""><h2>🎁 경품 추첨</h2><p class="lot-pool" id="lotPool"></p>
         <div class="lot-reel"><span class="lot-dept" id="lotDept">&nbsp;</span><b class="lot-name" id="lotName">?</b><span class="lot-stamp" id="lotStamp">당첨</span></div>
         <div class="lot-btns"><button type="button" class="lot-go" id="lotGo">추첨하기</button><button type="button" class="lot-x" id="lotX">닫기</button></div><p class="lot-win" id="lotWin"></p></div>`;
       document.body.appendChild(el);
