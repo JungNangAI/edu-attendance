@@ -121,7 +121,7 @@
           trs.push([q.q, cs.filter(c => c[1]).map(([o, c]) => `${o} ${c}명(${pct(c, vals.length)}%)`).join(', ') || '-']);
         } else {
           trs.push([q.q, `의견 ${vals.length}건`]);
-          vals.slice(0, 2).forEach(v => opin.push(`☞ "${String(v).slice(0, 60)}${String(v).length > 60 ? '…' : ''}"`));
+          [...new Set(vals.map(v => String(v).trim()))].slice(0, 2).forEach(v => opin.push(`☞ "${String(v).slice(0, 60)}${String(v).length > 60 ? '…' : ''}"`));
         }
       });
       items.push({ table: { head: ['문항', '결과'], widths: [45, 48], align: ['left', 'left'], rows: trs } });

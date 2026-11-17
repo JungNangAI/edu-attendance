@@ -1086,7 +1086,7 @@
   let reportLoading = null;
   async function makeReport() {
     try {
-      reportLoading = reportLoading || Promise.all([window.fflate ? 0 : loadScript('assets/fflate.min.js?v=20261118'), window.Report ? 0 : loadScript('assets/report.js?v=20261118')]);
+      reportLoading = reportLoading || Promise.all([window.fflate ? 0 : loadScript('assets/fflate.min.js?v=20261118'), window.Report ? 0 : loadScript('assets/report.js?v=20261118b')]);
       await reportLoading;
       A.toast('보고서를 만드는 중…', 'ok');
       const { d, all } = await exportData();
