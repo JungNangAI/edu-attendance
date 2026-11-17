@@ -17,7 +17,7 @@
     // 출석 방식: walkin 명단에 없는 사람도 받기 / one_phone 한 휴대폰 한 사람 / rotate_qr 30초마다 바뀌는 QR / depts 직접 쓸 때 보여 줄 부서 목록
     attend: { walkin: false, one_phone: false, rotate_qr: false, depts: [], anon: false },
     screen: {
-      theme: 'card', bg: '#f5f6fa', accent: '#212b46', bg_image: 'soft', characters: true, motion: 'normal', sound: 'both', music: 'auto', checkout: 'off',
+      theme: 'card', bg: '#f5f6fa', accent: '#212b46', bg_image: 'soft', characters: true, buddy: true, eta: true, motion: 'normal', sound: 'both', music: 'auto', checkout: 'off',
       texts: {
         chip: '출석 체크', qr_hint: '휴대폰 카메라로 QR을 찍고\n내 이름을 고르세요', welcome: '님 환영합니다',
         unit: '명 출석', foot: '제출하면 몇 초 안에 화면에 이름이 나옵니다.', tag1: '', tag2: '', done: '모두 출석했습니다!', cheer: '환영해요!'
@@ -63,6 +63,40 @@
     return out;
   }
   const withDefaults = c => merge(DEFAULT_CONFIG, c || {});
+
+  /* 한 줄 답에서 많이 나온 말 뽑기(AI 없이): 두 사람 이상이 쓴 말토막 중 가장 긴 것을 고르고, 끝의 조사와 뻔한 말은 뺀다.
+     돌려주는 값: [[말, 몇 명], …] */
+  const KP_STOP = new Set(['오늘', '교육', '정말', '너무', '많이', '조금', '그냥', '진짜', '감사', '감사합니다', '이번', '다음', '우리', '저는', '제가', '같아', '같아요',
+    '좋았', '좋았어', '좋았어요', '좋았습니다', '좋아요', '있어요', '있었', '있었어요', '있습니다', '했어요', '합니다', '입니다', '싶어요', '싶습니다', '하고', '해서', '하면', '하는', '되는', '있는', '없는', '수있', '것이', '것을', '그리고']);
+  const KP_PART = /(에서|에게|으로|이랑|까지|부터|처럼|보다|하고|이에요|예요|은|는|이|가|을|를|에|의|도|로|와|과|만|요)$/;
+  function keyPhrases(texts, max = 5) {
+    const docs = (texts || []).map(t => String(t || '').toLowerCase().replace(/[^가-힣a-z0-9 ]/g, ' '));
+    if (docs.length < 2) return [];
+    const cnt = new Map();
+    docs.forEach(d => {
+      const seen = new Set();
+      d.split(/\s+/).filter(Boolean).forEach(w => { for (let i = 0; i < w.length; i++) for (let L = 2; L <= Math.min(8, w.length - i); L++) seen.add(w.substr(i, L)); });
+      seen.forEach(s => cnt.set(s, (cnt.get(s) || 0) + 1));
+    });
+    let cs = [...cnt].filter(([, c]) => c >= 2);
+    cs = cs.filter(([s, c]) => !cs.some(([t, d]) => t.length > s.length && d === c && t.includes(s)));
+    const out = new Map();
+    cs.forEach(([s, c]) => {
+      let k = s; if (k.length > 2) k = k.replace(KP_PART, '');
+      if (k.length < 2 || KP_STOP.has(k) || /^\d+$/.test(k) || /(었|았|겠|했|어|워|해)$/.test(k) || (k.length > 2 && /습$/.test(k)) || (k.length === 2 && /(요|다|고|서|며|면|게|죠|네|니|데)$/.test(k))) return;
+      out.set(k, Math.max(out.get(k) || 0, c));
+    });
+    const arr = [...out].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length), res = [];
+    for (const [k, c] of arr) { if (res.some(([r]) => r.includes(k) || k.includes(r))) continue; res.push([k, c]); if (res.length >= max) break; }
+    return res;
+  }
+  /* 비슷한 글인지(두 글자 묶음이 얼마나 겹치는지, 0~1) */
+  function similar(a, b) {
+    const g = s => { const t = String(s || '').toLowerCase().replace(/[^가-힣a-z0-9]/g, ''), o = new Set(); for (let i = 0; i < t.length - 1; i++) o.add(t.substr(i, 2)); return o; };
+    const A = g(a), B = g(b); if (!A.size || !B.size) return 0;
+    let n = 0; A.forEach(x => { if (B.has(x)) n++; });
+    return 2 * n / (A.size + B.size);
+  }
   const DEFAULT_SURVEY = [
     { id: 'q1', type: 'star', q: '교육에 전반적으로 만족하시나요?', req: true },
     { id: 'q2', type: 'star', q: '강사(진행)에 만족하시나요?', req: true },
@@ -292,7 +326,7 @@
   }
 
   window.App = {
-    CFG, ready: !!(CFG.supabaseUrl && CFG.supabaseKey), DEFAULT_CONFIG, DEFAULT_SURVEY, THEMES, PALETTES, withDefaults, merge,
+    CFG, ready: !!(CFG.supabaseUrl && CFG.supabaseKey), DEFAULT_CONFIG, DEFAULT_SURVEY, THEMES, PALETTES, withDefaults, merge, keyPhrases, similar,
     rpc, RpcError, noFn, query, hashParam, links, siteBase, takeToken, deviceId, myEvents, rememberEvent, forgetEvent,
     esc, josa, hhmm, ymd, shortDate, applyColors, contrast, mix, lum,
     loadImage, shrinkImage, fetchAsDataUrl, loadAssets, qrCanvas, qrSvg, download, toast, dialog, choose, phoneOpen, confetti

@@ -145,7 +145,7 @@
             const cs = S.choices.map((c, i) => [i, c, (S.counts || [])[i] || 0]);
             if (S.answer != null) r = `정답률 ${pct((S.counts || [])[S.answer] || 0, S.n)}%(정답: ${S.choices[S.answer]})`;
             else r = cs.slice().sort((a, b) => b[2] - a[2]).slice(0, 3).map(([i, c, n]) => `${CIRC[i]} ${c} ${pct(n, S.n)}%`).join(', ');
-          } else if (k === 'text') r = `한 줄 답 ${S.n}건`;
+          } else if (k === 'text') { const kp = window.App && App.keyPhrases ? App.keyPhrases(S.texts || [], 4) : []; r = `한 줄 답 ${S.n}건` + (kp.length ? `, 많이 나온 말 ${kp.map(([w, c]) => `${w}(${c})`).join('·')}` : ''); }
           else r = 'Top ' + (S.words || []).filter(w => !(S.hidden || []).includes(w[0])).slice(0, 5).map(([w, c]) => `${w}(${c})`).join('·');
           items.push(`☞ ${p.q} → ${r} [응답 ${S.n}명]`);
         });

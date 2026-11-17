@@ -37,7 +37,7 @@
     } else {
       t.innerHTML = `<div class="tk-head"><h2 id="tkQ"></h2><span class="tk-n" id="tkN"></span><div class="tk-btns">${adm() ? `<button type="button" id="tkReveal" hidden></button><button type="button" id="tkOpen"></button><button type="button" id="tkNew">새 질문</button>` : ''}<button type="button" id="tkView" class="tk-view" hidden></button>${adm() ? `<button type="button" id="tkPng">그림으로 저장</button><button type="button" id="tkBack">출석 받기로 돌아가기</button>` : ''}</div></div>
         <div class="tk-cloud" id="tkCloud"><canvas id="tkCv"></canvas><p class="tk-empty" id="tkEmpty">휴대폰으로 답을 보내면 여기에 낱말이 쌓여요</p></div>
-        <div class="tk-bars" id="tkBars" hidden></div><div class="tk-texts" id="tkTexts" hidden></div>
+        <div class="tk-bars" id="tkBars" hidden></div><div class="tk-sum" id="tkSum" hidden></div><div class="tk-texts" id="tkTexts" hidden></div>
         ${adm() ? '<div class="tk-hidden" id="tkHidden" hidden></div><p class="tk-tip" id="tkTip">낱말을 누르면 숨길 수 있어요</p>' : ''}`;
     }
     if ($('tkBack')) $('tkBack').onclick = () => C.setMode('in');
@@ -62,9 +62,11 @@
     if (sig === lastSig) return; lastSig = sig;
     const shown = r.list.filter(q => q.status === 'show' || q.status === 'done'), wait = r.list.filter(q => q.status === 'wait');
     const fresh = shown.filter(q => !seenQ.has(q.id)); shown.forEach(q => seenQ.add(q.id));
-    $('tkN').textContent = `질문 ${shown.length}개`;
+    const groups = groupSimilar(shown);
+    $('tkN').textContent = `질문 ${shown.length}개` + (groups.length < shown.length ? ` · 비슷한 질문 묶음 ${shown.length - groups.length}개` : '');
     const box = $('tkQs');
-    box.innerHTML = shown.length ? shown.map(q => card(q)).join('') : '<p class="tk-empty on">아직 질문이 없어요. QR을 찍고 보내 주세요!</p>';
+    box.innerHTML = shown.length ? groups.map(g => card(g[0], g.slice(1))).join('') : '<p class="tk-empty on">아직 질문이 없어요. QR을 찍고 보내 주세요!</p>';
+    if (!firstLoad) qnaBuddy(shown, fresh);
     if (!firstLoad) fresh.forEach(q => { const c = box.querySelector(`[data-q="${q.id}"]`); if (c) c.classList.add('new'); });
     if (!firstLoad && fresh.length) { try { Sound.sfx('land'); } catch (e) {} }
     firstLoad = false;
@@ -74,10 +76,30 @@
     }
     if (spot) { const q = r.list.find(x => x.id === spot); if (q) openSpot(q); }
   }
-  function card(q) {
+  // 비슷한 질문 묶기: 👍 많은 질문부터, 글자 묶음이 절반쯤 겹치면 같은 묶음
+  function groupSimilar(list) {
+    const gs = [];
+    list.slice().sort((a, b) => (a.status === 'done') - (b.status === 'done') || b.likes - a.likes || (a.at < b.at ? -1 : 1)).forEach(q => {
+      const g = gs.find(g => g[0].status === q.status && A.similar(g[0].body, q.body) >= 0.45);
+      if (g) g.push(q); else gs.push([q]);
+    });
+    return gs;
+  }
+  let qSeenN = 0, burstAt = 0, topLiked = null, qTimes = [];
+  function qnaBuddy(shown, fresh) {
+    if (!C.buddy) return; const now = Date.now();
+    fresh.forEach(() => qTimes.push(now)); qTimes = qTimes.filter(t => now - t < 40000);
+    if (fresh.length && qSeenN === 0) C.buddy('첫 질문이 왔어요! 용기 내 주셔서 고마워요 🙌');
+    else if (qTimes.length >= 3 && now - burstAt > 120000) { burstAt = now; C.buddy('질문이 쏟아지고 있어요! 💬 👍 많은 순으로 보여 드릴게요'); }
+    qSeenN = shown.length;
+    const top = shown.filter(q => q.status === 'show').sort((a, b) => b.likes - a.likes)[0];
+    if (top && top.likes >= 3 && topLiked !== top.id) { topLiked = top.id; C.buddy(`"${top.body.length > 22 ? top.body.slice(0, 22) + '…' : top.body}" 질문에 공감이 몰리고 있어요 👍`); }
+  }
+  function card(q, sims = []) {
     const who = q.who ? `${A.esc(q.who.dept || '')} ${A.esc(q.who.name || '')}` : '익명';
+    const likes = q.likes + sims.reduce((t, x) => t + x.likes, 0);
     return `<article class="tk-card${q.status === 'done' ? ' done' : ''}" data-q="${q.id}">
-      <p>${A.esc(q.body)}</p><footer><span class="tk-who">${who}</span><span class="tk-like">👍 ${q.likes}</span>${q.status === 'done' ? '<span class="tk-done">답변 완료</span>' : ''}</footer>
+      <p>${A.esc(q.body)}${sims.length ? `<span class="tk-sim-n">비슷한 질문 ${sims.length + 1}개</span>` : ''}</p>${sims.length ? `<ul class="tk-sim">${sims.slice(0, 3).map(x => `<li>· ${A.esc(x.body)}</li>`).join('')}</ul>` : ''}<footer><span class="tk-who">${who}</span><span class="tk-like">👍 ${likes}</span>${q.status === 'done' ? '<span class="tk-done">답변 완료</span>' : ''}</footer>
       ${adm() ? `<div class="tk-act"><button type="button" data-act="spot" data-id="${q.id}">크게</button><button type="button" data-act="${q.status === 'done' ? 'show' : 'done'}" data-id="${q.id}">${q.status === 'done' ? '답변 전으로' : '답변 완료'}</button><button type="button" data-act="hide" data-id="${q.id}">숨기기</button></div>` : ''}</article>`;
   }
   async function act(id, what) {
@@ -126,10 +148,29 @@
       $('tkHidden').hidden = !poll.hidden.length || k === 'choice';
       $('tkHidden').innerHTML = poll.hidden.length ? (k === 'text' ? '숨긴 답: ' : '숨긴 낱말: ') + poll.hidden.map(w => `<button type="button" data-unhide="${A.esc(w)}">${A.esc(w.length > 14 ? w.slice(0, 14) + '…' : w)} ✕</button>`).join('') : '';
     }
-    $('tkCloud').hidden = view !== 'cloud'; $('tkBars').hidden = view !== 'bars'; $('tkTexts').hidden = view !== 'texts';
+    $('tkCloud').hidden = view !== 'cloud'; $('tkBars').hidden = view !== 'bars'; $('tkTexts').hidden = view !== 'texts'; if (view !== 'texts') $('tkSum').hidden = true;
+    pollBuddy();
     const sig = JSON.stringify([view, poll.words, poll.counts, poll.texts, poll.reveal, poll.answer]);
     if (sig === drawnSig) return; drawnSig = sig;
     if (view === 'cloud') draw(poll.words); else if (view === 'bars') bars(); else texts();
+  }
+  // 글주임 해설: 응답 수, 1등 낱말·보기, 퀴즈 정답률
+  let pbId = null, pbN = 0, pbTop = null, pbReveal = false;
+  function pollBuddy() {
+    if (!C.buddy || !poll) return;
+    if (pbId !== poll.id) { pbId = poll.id; pbN = poll.n; pbTop = null; pbReveal = !!poll.reveal; return; }
+    const k = kindOf(poll);
+    [10, 20, 30, 50, 100].forEach(m => { if (pbN < m && poll.n >= m) C.buddy(Buddy.pick([`벌써 ${m}명이 답했어요! 📮`, `답이 ${m}개 넘었어요. 아직 안 하신 분 어서요! ⏰`])); });
+    pbN = poll.n;
+    if (k !== 'text' && poll.n >= 5 && poll.words.length) {
+      const top = poll.words[0][0];
+      if (top !== pbTop) { if (pbTop !== null) C.buddy(k === 'choice' ? `지금은 '${top}'이(가) 1등이에요! 📊` : `1등 낱말이 바뀌었어요! 지금은 '${top}' ☁️`); pbTop = top; }
+    }
+    if (k === 'choice' && poll.reveal && !pbReveal && poll.answer != null && poll.n) {
+      const r = Math.round(((poll.counts || [])[poll.answer] || 0) * 100 / poll.n);
+      C.buddy(r >= 80 ? `정답률 ${r}%! 오늘 다들 똑똑한데요? 🤓` : r >= 50 ? `정답률 ${r}%! 절반 넘게 맞혔어요 👏` : `정답률 ${r}%… 이 부분은 한 번 더 짚어 볼까요? 😅`, { urgent: true });
+    }
+    pbReveal = !!poll.reveal;
   }
   // 관리 화면에서는 정답을 알아야 하므로, 던질 때 고른 정답을 기억해 둔다(공개 전엔 get_poll이 정답을 주지 않는다)
   const answerMemo = {};
@@ -150,8 +191,13 @@
       return `<div class="tk-bar${x.ok ? ' ok' : ''}${poll.reveal && choice && !x.ok ? ' dim' : ''}" style="--w:${w}%;--c:${COLORS[i % COLORS.length]}"><span class="tk-bl">${A.esc(x.label)}${x.ok ? ' <b>✓ 정답</b>' : ''}</span><span class="tk-bt"><i></i></span><span class="tk-bv">${x.c}${choice ? `<small>${pct}%</small>` : ''}</span></div>`;
     }).join('');
   }
+  let sumTop = null;
   function texts() {
     const box = $('tkTexts'), ts = poll.texts || [];
+    const kp = ts.length >= 3 ? A.keyPhrases(ts, 5) : [], sm = $('tkSum');
+    sm.hidden = !kp.length;
+    sm.innerHTML = kp.length ? '✨ 많이 나온 말 ' + kp.map(([w, c]) => `<span>${A.esc(w)}<small>${c}</small></span>`).join('') : '';
+    if (kp.length && kp[0][1] >= 3 && sumTop !== kp[0][0] && C.buddy) { sumTop = kp[0][0]; C.buddy(`'${kp[0][0]}' 이야기가 가장 많아요! ✨`); }
     box.innerHTML = ts.length ? ts.map(t => `<div class="tk-tx"${adm() ? ` data-hidetx="${A.esc(t)}"` : ''}>${A.esc(t)}</div>`).join('') : '<p class="tk-empty on">휴대폰으로 답을 보내면 여기에 카드가 쌓여요</p>';
   }
   async function toggleReveal() {
@@ -326,6 +372,7 @@
           S.choices.forEach((c, j) => sum.push(['', c + (quiz && S.answer === j ? ' (정답)' : ''), S.counts[j] || 0, S.n ? Math.round((S.counts[j] || 0) * 100 / S.n) + '%' : '0%']));
           if (quiz) sum.push(['', '정답률', '', S.n ? Math.round((S.counts[S.answer] || 0) * 100 / S.n) + '%' : '-']);
         } else if (k === 'text') {
+          const kp = A.keyPhrases(S.texts || [], 8); if (kp.length) sum.push(['', '많이 나온 말: ' + kp.map(([w, c]) => `${w}(${c})`).join(', ')]);
           sum.push(['', '답(최근 순)']);
           (S.texts || []).forEach(t => sum.push(['', t + (S.hidden.includes(t) ? ' (숨김)' : '')]));
         } else {

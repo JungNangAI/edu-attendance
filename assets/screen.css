@@ -288,3 +288,24 @@ body.mode-talk #chip{background:#7048e8;color:#fff}
 .tk-tx[data-hidetx]{cursor:pointer}
 .tk-tx:nth-child(4n+2){border-left-color:#1c7ed6}.tk-tx:nth-child(4n+3){border-left-color:#f08c00}.tk-tx:nth-child(4n+4){border-left-color:#2f9e44}
 body.phone-admin .talk{display:none}
+
+/* ---------- 글주임 해설 · 출석 완료 예측 ---------- */
+.eta{font-size:1.9vh;font-weight:700;color:var(--ink);background:var(--panel);border:1px dashed var(--line);border-radius:1.4vh;padding:1vh 1.4vh;line-height:1.35}
+.eta b{color:#7048e8;font-size:1.15em}
+.eta[hidden]{display:none}
+body.mode-talk .eta{display:none}
+.buddy{position:fixed;left:2vh;bottom:6vh;z-index:2600;display:flex;align-items:flex-end;gap:1vh;pointer-events:none;opacity:0;transform:translateY(3vh) scale(.9);transition:opacity .35s,transform .45s cubic-bezier(.2,1.4,.4,1)}
+.buddy.on{opacity:1;transform:none}
+.buddy img{width:13vh;height:auto;filter:drop-shadow(0 .8vh 1.2vh rgba(0,0,0,.25))}
+.buddy p{position:relative;margin:0 0 7vh;max-width:42vw;background:#fff;color:#1b2133;border:.35vh solid #1b2133;border-radius:2.4vh;padding:1.6vh 2.2vh;font-size:2.7vh;font-weight:800;line-height:1.35;word-break:keep-all;box-shadow:.6vh .6vh 0 rgba(27,33,51,.25)}
+.buddy p::before{content:"";position:absolute;left:-1.6vh;bottom:2vh;border:1vh solid transparent;border-right:1.6vh solid #1b2133}
+body.phone-admin .buddy{display:none}
+/* 비슷한 질문 묶기 · 한 줄 답 요약 */
+.tk-sim{margin:.8vh 0 0;padding:.8vh 0 0;border-top:1px dashed #e1e4ec;font-size:1.7vh;color:#6b7280;list-style:none}
+.tk-sim li{padding:.2vh 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-sim-n{display:inline-block;background:#f3efff;color:#7048e8;font-weight:800;font-size:1.6vh;border-radius:99px;padding:.2vh 1vh;margin-left:.6vh}
+.tk-sum{display:flex;align-items:center;gap:1vh;flex-wrap:wrap;margin:0 0 1.2vh;font-size:2.2vh;font-weight:800;color:#1b2133}
+.tk-sum[hidden]{display:none}
+.tk-sum span{background:#fff7d6;border:1px solid #f5d76e;border-radius:99px;padding:.4vh 1.4vh}
+.tk-sum span small{color:#b08900;margin-left:.4vh}
+body:not(.mode-talk) .buddy{bottom:17vh}

@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gaegu:wght@700&family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="assets/common.css?v=20261115c">
-<link rel="stylesheet" href="assets/screen.css?v=20261118b">
+<link rel="stylesheet" href="assets/screen.css?v=20261118d">
 <link rel="stylesheet" href="assets/themes.css?v=20261115">
 </head>
 <body class="screen theme-card">
@@ -30,6 +30,7 @@
       <div><div class="count-num"><b id="count">0</b> <span>/ <span id="total">0</span></span></div><div class="count-unit" id="unit">명 출석</div></div>
     </div>
     <div class="session" id="session">—</div>
+    <div class="eta" id="eta" hidden></div>
   </aside>
   <section class="board" id="board" aria-label="출석 보드"></section>
 </main>
@@ -68,10 +69,11 @@
 <div class="msg-full" id="full" hidden></div>
 <script src="config.js"></script>
 <script src="assets/qrcode.js?v=20261115"></script>
-<script src="assets/common.js?v=20261118"></script>
+<script src="assets/common.js?v=20261118c"></script>
 <script src="assets/sound.js?v=20261115n"></script>
 <script src="assets/wordcloud2.js?v=20261117"></script>
-<script src="assets/talk.js?v=20261118"></script>
-<script src="assets/screen.js?v=20261118b"></script>
+<script src="assets/buddy.js?v=20261118c"></script>
+<script src="assets/talk.js?v=20261118c"></script>
+<script src="assets/screen.js?v=20261118c"></script>
 </body>
 </html>

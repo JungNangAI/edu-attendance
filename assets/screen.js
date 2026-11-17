@@ -589,8 +589,13 @@
       if (!(queue.length > 6 && displayed.length % 2)) Sound.sfx('arrive', { i: displayed.length - 1 });
       if (p && p.dept && !p.extra) {   // 소속 전원 출석 이벤트
         const st = deptStat(p.dept);
-        if (st.t >= 2 && st.a === st.t) setTimeout(() => { Sound.sfx('dept'); deptToast(p.dept); A.confetti({ colors: ['#106A3A', '#9E1C84', '#0057A3', '#ffd43b'], count: 70 }); }, 700);
+        if (st.t >= 2 && st.a === st.t) {
+          setTimeout(() => { Sound.sfx('dept'); deptToast(p.dept); A.confetti({ colors: ['#106A3A', '#9E1C84', '#0057A3', '#ffd43b'], count: 70 }); }, 700);
+          if (!deptsDone.size) buddy(Buddy.pick([`${p.dept} 전원 출석! 오늘의 1등 부서예요 👏`, `1등 부서는 ${p.dept}! 다 모이셨어요 🏆`]));
+          deptsDone.add(p.dept);
+        }
       }
+      onArrive(p);
       const m = msReached();
       if (m > msDone) {   // 50·60·70·80·90% 달성 때마다 그 비율만큼의 글주임이 축하, 100%는 전원
         msDone = m;
@@ -609,6 +614,35 @@
       setTimeout(arriveNext, queue.length > 3 ? 450 : 1300);
     };
     if (impl.arrive && !matchMedia('(prefers-reduced-motion: reduce)').matches) impl.arrive(s, $('board'), finish); else finish();
+  }
+
+  /* ---------- 글주임 해설 · 출석 완료 예측 ---------- */
+  const deptsDone = new Set(); let arrTimes = [], rushAt = 0, quietAt = 0;
+  const buddyOn = () => cfg.screen.buddy !== false && !PREVIEW && window.Buddy;
+  function buddy(t, o) { if (buddyOn()) Buddy.say(t, o); }
+  function onArrive(p) {
+    const now = Date.now(); arrTimes.push(now); arrTimes = arrTimes.filter(t => now - t < 30000);
+    if (displayed.length === 1 && p) buddy(Buddy.pick([`${p.name} 님, 오늘 1등으로 오셨어요! 🥇`, `첫 출석은 ${p.name} 님! 부지런하시네요 🌅`]));
+    if (arrTimes.length >= 5 && now - rushAt > 120000) { rushAt = now; buddy(Buddy.pick([`와, 30초 만에 ${arrTimes.length}명! 출석 러시예요 🏃`, `한꺼번에 ${arrTimes.length}명이 들어왔어요! 화면이 바빠요 😆`])); }
+    if (roster.length && roster.length - rosterHere() === 1 && pctNow() < 100) { const left = roster.find(q => !displayed.includes(q.no)); buddy(`이제 딱 한 분 남았어요! ${left ? left.name + ' 님, 기다릴게요 🙏' : ''}`); }
+    etaTick();
+  }
+  // 지난 10분 동안 들어온 속도로 '언제쯤 다 모일지' 계산
+  let etaT = 0;
+  function etaTick() {
+    clearTimeout(etaT); etaT = setTimeout(etaTick, 15000);
+    const e = $('eta'); if (!e) return;
+    const left = roster.length - rosterHere();
+    if (!roster.length || cfg.screen.eta === false || mode !== 'in' || left <= 0 || displayed.length < 2) { e.hidden = true; return; }
+    const now = Date.now(), ts = lastList.map(x => Date.parse(x.at)).filter(t => t && now - t < 600000).sort((a, b) => a - b);
+    let txt = `아직 ${left}명 오는 중`;
+    if (ts.length >= 3) {
+      const span = Math.max(60000, now - ts[0]), perMin = ts.length / (span / 60000), mins = left / perMin;
+      if (mins <= 45) { const d = new Date(now + mins * 60000); txt = `⏱ 이 속도면 <b>${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}</b>쯤 모두 모여요`; }
+    }
+    e.innerHTML = txt; e.hidden = false;
+    const lastIn = ts.length ? ts[ts.length - 1] : 0;
+    if (lastIn && now - lastIn > 180000 && now - quietAt > 300000 && pctNow() >= 30) { quietAt = now; buddy(Buddy.pick([`아직 ${left}명이 오고 있어요. 조금만 기다려 볼까요? ⏳`, `${left}분만 더 오시면 다 모여요! 🙌`])); }
   }
 
   function applyList(nos, animate) {
@@ -693,7 +727,7 @@
     $('qrHint').textContent = isOutMode() ? '수업이 끝났어요. QR을 찍고 퇴실해 주세요' : mode === 'survey' ? '오늘 교육은 어땠나요?\nQR을 찍고 답해 주세요' : mode === 'qna' ? '궁금한 점이 있나요?\nQR을 찍고 질문을 보내 주세요' : mode === 'poll' ? 'QR을 찍고 답을 보내 주세요\n(출석한 휴대폰엔 저절로 떠요)' : qrHint();
     if (sessionLabel) $('session').textContent = sessionLabel + modeSuffix();
     modeBtn();
-    markLeft(); setCount(displayed.length, false);
+    markLeft(); setCount(displayed.length, false); etaTick();
   }
   // 퇴실 체크를 쓰는 행사에서만 버튼을 보인다 (퇴실 받는 중이면 되돌릴 수 있게 항상 보임)
   function modeBtn() {
@@ -998,6 +1032,7 @@
       try { if (t < total) Sound.sfx('land'); } catch (e) {}
       if (t >= total) {
         void stamp.offsetWidth; stamp.classList.add('hit'); winners.push(win.no); poolText(); go.disabled = false; go.textContent = '한 명 더';
+        buddy(pickKind === 'talk' ? `${win.name} 님, 발표 부탁드려요! 🎤` : pickKind === 'prize' ? `${win.name} 님, 축하드려요! 🎉` : `${win.name} 님이 뽑혔어요! 🎲`, { urgent: true });
         try { Sound.sfx('milestone', { pct: 90 }); } catch (e) {} A.confetti({ count: 120 }); return;
       }
       const d = 50 + 380 * Math.pow(t / total, 2.4); t += d; setTimeout(tick, d);
@@ -1079,6 +1114,7 @@
     try {
       await A.rpc('set_groups', { p_id: eventId, p_token: token, p_groups: { names: groupsDraft.names, map: groupsDraft.map } });
       groupsNow = groupsDraft; renderGroups(true); A.toast('휴대폰에 조를 알렸어요', 'ok'); A.confetti({ count: 80 });
+      buddy(`${groupsDraft.names.length}개 조 완성! 휴대폰 아래에서 내 조를 확인하세요 🧩`);
     } catch (e) { A.toast(talkFnMsg(e, '조 편성'), 'bad'); }
   }
   /* 📝 결과보고서 초안(한글): 출석·만족도·질문 기록을 모아 단면 보고서 HWPX를 내려받는다 */
@@ -1086,7 +1122,7 @@
   let reportLoading = null;
   async function makeReport() {
     try {
-      reportLoading = reportLoading || Promise.all([window.fflate ? 0 : loadScript('assets/fflate.min.js?v=20261118'), window.Report ? 0 : loadScript('assets/report.js?v=20261118b')]);
+      reportLoading = reportLoading || Promise.all([window.fflate ? 0 : loadScript('assets/fflate.min.js?v=20261118'), window.Report ? 0 : loadScript('assets/report.js?v=20261118c')]);
       await reportLoading;
       A.toast('보고서를 만드는 중…', 'ok');
       const { d, all } = await exportData();
@@ -1261,7 +1297,7 @@
       applyEvent(r.ev, r.am); eventSig = sigOf(r);
       token = A.takeToken(eventId);
       if (token) isAdmin = await A.rpc('check_admin', { p_id: eventId, p_token: token }).catch(() => false);
-      if (window.Talk) Talk.init({ eventId, token: () => token, isAdmin: () => isAdmin, cfg: () => cfg, toast: A.toast, noFnMsg: (e, w) => talkFnMsg(e, w),
+      if (window.Talk) Talk.init({ eventId, token: () => token, isAdmin: () => isAdmin, cfg: () => cfg, toast: A.toast, buddy: (t, o) => buddy(t, o), noFnMsg: (e, w) => talkFnMsg(e, w),
         setMode: m => setTalkMode(m), onBoard: b => { if (b && b.session) { setSession(b.session); applyMode(b.session.mode, b.session.poll_id || null); } } });
       if (isAdmin) setupAdmin();
       refreshQr();
