@@ -135,7 +135,7 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
 </main>
 <div class="bottom" id="bottom" hidden><div class="in"><button type="button" class="btn primary big" id="go" disabled>내 이름을 골라 주세요</button></div></div>
 <script src="config.js"></script>
-<script src="assets/common.js?v=20261117"></script>
+<script src="assets/common.js?v=20261117b"></script>
 <script src="assets/sound.js?v=20261115n"></script>
 <script>
 (function(){
@@ -355,6 +355,30 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
   document.addEventListener('click', e => { const b = e.target.closest('[data-talk="ask"]'); if (!b) return; const cur = $('result').hidden ? null : $('result').innerHTML; backTo = cur ? () => { $('result').innerHTML = cur; show('result'); bindAgain(); } : null; showAsk(); });
   let bindAgain = () => {};
 
+  /* 이름 없이 받는 행사: QR만 찍으면 '참석자 n'으로 출석 */
+  const anonEv = () => !!(cfg && cfg.attend && cfg.attend.anon);
+  async function joinAnon(){
+    $('title').textContent = cfg.join.title || '출석 체크';
+    full('출석하는 중…', '잠시만 기다려 주세요.');
+    try {
+      const r = await A.rpc('join_anon', { p_id: eventId, p_device: DEVICE, p_pass: pass });
+      if (r.status === 'error') { if (r.code === 'qr') return full('QR이 바뀌었어요', '강의실 화면의 QR을 다시 찍어 주세요.'); throw new Error(r.message); }
+      showAnon(r);
+    } catch (e) { full('출석하지 못했어요', A.noFn && A.noFn(e) ? '아직 준비 중이에요. 담당자에게 말씀해 주세요(저장소 업데이트 필요).' : (e.message || '새로고침한 뒤 다시 해 주세요.')); }
+  }
+  function showAnon(r){
+    const dup = r.status === 'dup';
+    $('result').className = 'panel result' + (dup ? ' dup' : '');
+    $('result').innerHTML = `<img class="mascot" src="assets/defaults/${dup ? 'main' : 'welcome'}.png" alt=""><svg class="check" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="45"/><path d="M30 52l13 13 27-29"/></svg>
+      <h2>${dup ? '이미 출석했어요' : A.esc(cfg.join.ok_title)}</h2>
+      <div class="who-line">${r.nth ? `오늘 ${r.nth}번째 참석자예요` : '환영합니다'}</div>
+      <p class="meta">${A.esc(r.session || '')}${r.at ? ' · ' + A.hhmm(r.at) + ' 출석' : ''} · 이름 없이</p>
+      ${qnaOn() || pollOn() ? `<p class="hint2">${pollOn() ? '강사님이 질문을 던지면 이 화면에 저절로 떠요.' : ''}${qnaOn() && pollOn() ? '<br>' : ''}${qnaOn() ? '궁금한 점은 아래 버튼으로 보내 주세요.' : ''}</p>` : `<p class="hint2">${A.esc(cfg.join.ok_hint)}</p>`}
+      ${talkLinks()}`;
+    show('result'); startLive();
+    if (!dup) { try { Sound.sfx('phone'); } catch (e) {} A.confetti({ count: 90, colors: [cfg.screen.accent, '#ffd43b', '#51cf66', '#4dabf7'] }); }
+  }
+
   function showResult(r){
     if (r.kind === 'out' && r.status !== 'dup' && surveyOn() && !(enter && enter.answered) && !store.get('sv:' + (session && session.id))) {
       return showSurvey(r, () => showResultCore(r));
@@ -423,7 +447,9 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
         const ev = e.data.event, walk = ev.config.attend && ev.config.attend.walkin;
         const r = ev.roster && ev.roster.length ? ev.roster : walk ? [] : [{ no: 1, dept: '스마트정보과', rank: '', name: '김가람' }, { no: 2, dept: '감사담당관', rank: '', name: '이나래' }];
         apply({ config: ev.config, roster: r, session: { id: 'p', label: ev.config.first_session || '1회차' } }, e.data.assets);
-        chosen = null; setView(r.length ? 'pick' : 'write'); show('formPanel');
+        chosen = null;
+        if (cfg.attend && cfg.attend.anon) { showAnon({ status: 'ok', nth: 7, session: session.label, at: new Date().toISOString() }); return; }
+        setView(r.length ? 'pick' : 'write'); show('formPanel');
       });
       parent.postMessage({ type: 'preview-ready', page: 'join' }, location.origin);
       return;
@@ -451,6 +477,10 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
         if ((enter && enter.answered) || store.get('sv:' + session.id)) return thanks(true);
         if (enter && !enter.me && strictOn()) return full('출석한 사람만 답할 수 있어요', '이번 회차에 이 휴대폰으로 출석한 사람만 만족도 조사에 답할 수 있어요.');
         return showSurvey(null, null);
+      }
+      if (anonEv() && !legacy) {   // 이름 없이 받는 행사: 고르는 단계 없이 바로 출석(퇴실 모드여도 출석만)
+        if (enter && enter.rotate && !enter.code_ok && !(enter.me && enter.me.at)) return full('QR이 바뀌었어요', '강의실 화면의 QR을 다시 찍어 주세요.');
+        return joinAnon();
       }
       const out = isOut(), qrOld = () => full('QR이 바뀌었어요', '강의실 화면의 QR을 다시 찍어 주세요.');
       if (strictOn() && enter.me) {   // 한 휴대폰 한 사람: 저장소가 기억하는 내 출석

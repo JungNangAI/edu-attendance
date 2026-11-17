@@ -14,7 +14,7 @@
     poll: { on: false, anon: true, max: '3', prepared: '' },
     lottery: false,
     // 출석 방식: walkin 명단에 없는 사람도 받기 / one_phone 한 휴대폰 한 사람 / rotate_qr 30초마다 바뀌는 QR / depts 직접 쓸 때 보여 줄 부서 목록
-    attend: { walkin: false, one_phone: false, rotate_qr: false, depts: [] },
+    attend: { walkin: false, one_phone: false, rotate_qr: false, depts: [], anon: false },
     screen: {
       theme: 'card', bg: '#f5f6fa', accent: '#212b46', bg_image: 'soft', characters: true, motion: 'normal', sound: 'both', music: 'auto', checkout: 'off',
       texts: {

@@ -654,6 +654,7 @@
   // QR 안내: 명단 없이 받는 행사인데 문구를 기본값 그대로 뒀으면 "이름을 고르세요" 대신 "쓰세요"
   function qrHint() {
     const h = cfg.screen.texts.qr_hint || '';
+    if (cfg.attend && cfg.attend.anon && h === A.DEFAULT_CONFIG.screen.texts.qr_hint) return '휴대폰 카메라로 QR만 찍으면\n출석 끝! (이름 없이)';
     return !roster.length && h === A.DEFAULT_CONFIG.screen.texts.qr_hint ? '휴대폰 카메라로 QR을 찍고\n부서와 이름을 쓰세요' : h;
   }
   /* QR: 보통은 그대로, '바뀌는 QR'이면 30초마다 암호를 새로 받아 다시 그린다(담당자용 화면만) */
@@ -1103,7 +1104,8 @@
       if (e.origin !== location.origin || !e.data || e.data.type !== 'preview') return;
       clearInterval(ping);
       const { event, assets: am } = e.data;
-      const sample = (event.roster && event.roster.length ? event.roster : Array.from({ length: 24 }, (_, i) => ({ no: i + 1, dept: ['스마트정보과', '감사담당관', '일자리정책과', '행정지원과'][i % 4], rank: '', name: ['김가람', '이나래', '박다온', '최라온', '정마루', '강바다'][i % 6] })));
+      const anonP = !!(event.config.attend && event.config.attend.anon);
+      const sample = anonP ? Array.from({ length: 24 }, (_, i) => ({ no: 1000001 + i, dept: '', rank: '', name: '참석자 ' + (i + 1) })) : (event.roster && event.roster.length ? event.roster : Array.from({ length: 24 }, (_, i) => ({ no: i + 1, dept: ['스마트정보과', '감사담당관', '일자리정책과', '행정지원과'][i % 4], rank: '', name: ['김가람', '이나래', '박다온', '최라온', '정마루', '강바다'][i % 6] })));
       applyEvent({ config: event.config, roster: sample }, am);
       setSession({ id: 'p', label: event.config.first_session || '1회차' });
       clearTimeout(loop); queue = []; running = false; displayed = []; msDone = 0;

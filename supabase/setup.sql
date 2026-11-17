@@ -1053,6 +1053,44 @@ begin
               from polls p where p.event_id = p_id), '[]'::jsonb));
 end $$;
 
+
+-- 이름 없이 받는 행사(config.attend.anon): QR만 찍으면 '참석자 n'으로 출석. 같은 휴대폰은 회차가 바뀌어도 같은 번호
+create or replace function join_anon(p_id uuid, p_device text, p_pass text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e events; s sessions; d text; n int; k int; a attendance;
+begin
+  select * into e from events where id = p_id and expires_at >= now();
+  if e.id is null then return jsonb_build_object('status', 'error', 'message', '행사를 찾을 수 없습니다'); end if;
+  if not _opt(e, 'anon') then return jsonb_build_object('status', 'error', 'message', '이름을 골라 출석하는 행사예요. 새로고침해 주세요'); end if;
+  d := _dev(p_device);
+  if d is null then return jsonb_build_object('status', 'error', 'message', '화면을 새로고침한 뒤 다시 해 주세요'); end if;
+  select * into s from sessions where id = e.current_session;
+  select * into a from attendance where session_id = s.id and device = d limit 1;
+  if a.session_id is null then
+    if not _pass_ok(e, d, p_pass) then
+      return jsonb_build_object('status', 'error', 'code', 'qr', 'message', 'QR이 바뀌었어요. 강의실 화면의 QR을 다시 찍어 주세요');
+    end if;
+    select person_no into n from attendance where event_id = e.id and device = d order by at desc nulls last limit 1;
+    if n is null then
+      if (select count(*) from extras where event_id = e.id) >= 3000 then
+        return jsonb_build_object('status', 'error', 'message', '참석자가 너무 많아요(3,000명까지)');
+      end if;
+      k := coalesce((select max(no) from extras where event_id = e.id), 1000000) + 1 - 1000000;
+      n := _add_extra(e.id, '', '참석자 ' || k);
+    end if;
+    insert into attendance(session_id, event_id, person_no, at, device) values (s.id, e.id, n, now(), d)
+      on conflict (session_id, person_no) do nothing;
+    select * into a from attendance where session_id = s.id and person_no = n;
+    perform _touch(e.id);
+    return jsonb_build_object('status', 'ok', 'kind', 'in', 'no', n, 'session', s.label, 'at', a.at,
+      'name', (select name from extras where event_id = e.id and no = n),
+      'nth', (select count(*) from attendance where session_id = s.id and at is not null and at <= a.at));
+  end if;
+  return jsonb_build_object('status', 'dup', 'kind', 'in', 'no', a.person_no, 'session', s.label, 'at', a.at,
+    'name', (select name from extras where event_id = e.id and no = a.person_no),
+    'nth', (select count(*) from attendance where session_id = s.id and at is not null and at <= a.at));
+end $$;
+
 -- ---------- 함수 실행 권한 ----------
 revoke execute on all functions in schema public from public;
 do $$
@@ -1070,7 +1108,7 @@ begin
     'ask_question(uuid,text,text,boolean)', 'like_question(uuid,text,bigint)', 'get_questions(uuid,text,text)',
     'set_question(uuid,text,bigint,text)', 'start_poll(uuid,text,text)', 'open_poll(uuid,text,bigint,boolean)',
     'hide_word(uuid,text,bigint,text,boolean)', 'get_poll(uuid,bigint,text)', 'answer_poll(uuid,text,bigint,jsonb)',
-    'export_talk(uuid,text)']
+    'export_talk(uuid,text)', 'join_anon(uuid,text,text)']
   loop
     if exists (select 1 from pg_roles where rolname = 'anon') then
       execute format('grant execute on function %s to anon', f);

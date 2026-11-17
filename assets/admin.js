@@ -25,7 +25,12 @@
   }
   // 출석 방식: 명단 밖 출석을 켜면 부서 목록 칸이 보이고, 명단이 없어도 된다
   const walkin = () => !!(state.config.attend && state.config.attend.walkin);
-  function syncAttendUi() { $('deptsBox').hidden = !walkin(); }
+  const anonEv = () => !!(state.config.attend && state.config.attend.anon);
+  function syncAttendUi() {
+    const an = anonEv();
+    if (an && !state.config.attend.walkin) state.config.attend.walkin = true;   // 이름 없이 받기 = 명단 없이 받기
+    $('deptsBox').hidden = !walkin() || an; $('walkinBox').hidden = an; $('rosterArea').hidden = an;
+  }
   $('depts').addEventListener('input', e => {
     e.stopPropagation();
     state.config.attend.depts = [...new Set(e.target.value.split(/\r?\n/).map(x => x.trim().slice(0, 60)).filter(Boolean))].slice(0, 300);
@@ -99,7 +104,7 @@
   const keepDays = () => [10, 30, 60, 90].includes(+state.config.keep_days) ? +state.config.keep_days : 10;
   function renderSummary() {
     const c = state.config, items = [
-      ['행사', c.title || '(없음)'], ['명단', state.roster.length ? state.roster.length + '명' + (walkin() ? ' + 명단에 없는 사람도 받기' : '') : (walkin() ? '명단 없이 오는 대로 받기' : '0명')],
+      ['행사', c.title || '(없음)'], ['명단', anonEv() ? '이름 없이 받기(익명)' : state.roster.length ? state.roster.length + '명' + (walkin() ? ' + 명단에 없는 사람도 받기' : '') : (walkin() ? '명단 없이 오는 대로 받기' : '0명')],
       ['출석 방식', [c.attend.one_phone ? '한 휴대폰 한 사람' : '휴대폰 제한 없음', c.attend.rotate_qr ? '30초마다 바뀌는 QR' : '', c.screen.checkout === 'on' ? '퇴실 체크' : ''].filter(Boolean).join(' · ')],
       ['테마', (A.THEMES[c.screen.theme] || {}).label],
       ['증서', c.cert.enabled ? `${c.cert.title} · ${c.cert.only_attendees === 'pass' ? '이수한 사람만' : c.cert.only_attendees === 'inout' ? '입실·퇴실 모두 한 사람만' : c.cert.only_attendees ? '출석한 사람만' : '누구나'}` : '쓰지 않음']
@@ -483,7 +488,7 @@
     const pw = $('pwField').hidden ? '' : $('pw').value;
     const btn = $('createBtn'); btn.disabled = true; btn.textContent = '만드는 중…'; $('createErr').textContent = '';
     try {
-      const r = created || await A.rpc('create_event', { p_password: pw, p_config: state.config, p_roster: state.roster });
+      const r = created || await A.rpc('create_event', { p_password: pw, p_config: state.config, p_roster: anonEv() ? [] : state.roster });
       created = r;
       const keys = Object.keys(state.assets).filter(k => state.assets[k]);
       btn.textContent = '이미지 올리는 중…';
@@ -511,7 +516,7 @@
     if (p.length) { A.toast(p[0][1], 'bad'); showStep(p[0][0]); return; }
     const btns = [$('saveBtn'), $('saveTop')]; btns.forEach(b => { b.disabled = true; });
     try {
-      await A.rpc('update_event', { p_id: eventId, p_token: token, p_config: state.config, p_roster: state.roster });
+      await A.rpc('update_event', { p_id: eventId, p_token: token, p_config: state.config, p_roster: anonEv() ? [] : state.roster });
       await uploadAssets(eventId, token, [...state.dirty]);
       state.dirty.clear(); changed = false;
       await importHistory(eventId, token);

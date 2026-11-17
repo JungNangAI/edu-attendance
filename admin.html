@@ -53,12 +53,17 @@
     <section class="step card" data-step="2" hidden>
       <h2>2. 명단</h2>
       <p class="hint" style="margin-top:-6px">엑셀 파일을 올리면 이 브라우저 안에서 읽습니다. 연번·부서·직위·성명과 연락처(있으면)만 저장해요. 연락처는 담당자의 관리 화면에서만 보여요.</p>
-      <div class="attend-box">
+      <div class="attend-box anon-box">
+        <label class="check big"><input type="checkbox" data-k="attend.anon" id="anonOn"> 이름 없이 받기 (익명) <span class="hint-inline">명단·이름 입력 없이 QR만 찍으면 끝</span></label>
+        <p class="hint">휴대폰으로 QR을 찍으면 바로 <b>'참석자 1, 2, 3…'</b>으로 출석돼요. 몇 명 왔는지와 질문 받기·워드클라우드만 필요할 때 좋아요. 같은 휴대폰은 한 번만 세요. 엑셀에는 이름 없이 인원과 시각만 남아요.</p>
+      </div>
+      <div class="attend-box" id="walkinBox">
         <label class="check"><input type="checkbox" data-k="attend.walkin"> 명단에 없는 사람도 출석 받기 (휴대폰에서 부서·이름을 직접 써요)</label>
         <p class="hint">명단을 올리고 켜면 <b>명단 + 갑자기 온 사람</b>을 함께 받고, 명단 없이 이것만 켜면 <b>오는 대로 받는 방명록</b>이 돼요. 직접 쓴 사람은 엑셀에 '추가'로 표시돼요.</p>
         <div class="field" id="deptsBox" hidden><label class="f" for="depts">부서 목록 (선택)</label><textarea id="depts" rows="3" style="min-height:76px" placeholder="한 줄에 하나씩 써 주세요&#10;기획예산과&#10;스마트정보과"></textarea>
           <p class="hint">직접 쓰는 사람이 부서를 눌러 고를 수 있게 보여 줘요. 비워 두면 명단에 있는 부서가 나와요.</p></div>
       </div>
+      <div id="rosterArea">
       <div class="drop" id="drop" tabindex="0" role="button" aria-label="명단 엑셀 파일 올리기">
         <input type="file" id="rosterFile" accept=".xlsx,.xls,.csv" hidden>
         <b>엑셀 파일을 여기에 끌어다 놓거나 눌러서 고르세요</b><span>.xlsx · .xls · .csv</span>
@@ -77,6 +82,7 @@
       </div>
       <div id="rosterInfo"></div>
       <div class="table-wrap"><table class="roster" id="rosterTable"></table></div>
+    </div>
     </section>
 
     <!-- 3. 출석 화면 -->
@@ -266,8 +272,8 @@
 <script src="config.js"></script>
 <script src="assets/qrcode.js?v=20261115"></script>
 <script src="assets/xlsx.full.min.js?v=20261115"></script>
-<script src="assets/common.js?v=20261117"></script>
+<script src="assets/common.js?v=20261117b"></script>
 <script src="assets/cert.js?v=20261115"></script>
-<script src="assets/admin.js?v=20261117"></script>
+<script src="assets/admin.js?v=20261117b"></script>
 </body>
 </html>
