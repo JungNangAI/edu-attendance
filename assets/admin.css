@@ -151,3 +151,8 @@ table.roster td.rdel button{font:inherit;font-size:14px;width:30px;height:30px;b
 table.roster td.rdel button:hover{background:#fdecec;border-color:#e8a1a1}
 table.roster tr:hover td{background:#fffaf0}
 .link-btn{font:inherit;font-size:14px;font-weight:700;color:#5420c4;background:none;border:0;padding:0 0 0 6px;cursor:pointer;text-decoration:underline}
+.link-btn.danger{color:#b2452f;margin-left:8px}
+.ok-box.warn-box{background:#fff4e5;color:#8a4b08}
+.roster-find{display:flex;align-items:center;gap:10px;margin:12px 0 6px}
+.roster-find input{flex:1;max-width:320px}
+.roster-find span{font-size:14px;color:var(--muted)}

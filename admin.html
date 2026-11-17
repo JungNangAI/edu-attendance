@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&family=Nanum+Myeongjo:wght@400;700;800&display=swap">
 <link rel="stylesheet" href="assets/common.css?v=20261115c">
-<link rel="stylesheet" href="assets/admin.css?v=20261117c">
+<link rel="stylesheet" href="assets/admin.css?v=20261117e">
 </head>
 <body>
 <header class="topbar"><div class="wrap">
@@ -81,6 +81,7 @@
         </div>
       </div>
       <div id="rosterInfo"></div>
+      <div class="roster-find" id="rosterFind" hidden><input type="search" id="rosterQ" placeholder="🔍 이름·부서·연번으로 찾기" autocomplete="off" aria-label="명단에서 찾기"><span id="rosterHit"></span></div>
       <div class="table-wrap"><table class="roster" id="rosterTable"></table></div>
     </div>
     </section>
@@ -274,6 +275,6 @@
 <script src="assets/xlsx.full.min.js?v=20261115"></script>
 <script src="assets/common.js?v=20261117b"></script>
 <script src="assets/cert.js?v=20261115"></script>
-<script src="assets/admin.js?v=20261117c"></script>
+<script src="assets/admin.js?v=20261117e"></script>
 </body>
 </html>

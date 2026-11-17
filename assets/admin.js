@@ -162,13 +162,23 @@
     touch('roster');
   }
   // 명단에서 한 사람씩 빼기 / 되살리기 (저장하기 전까지는 되돌릴 수 있어요)
+  $('rosterQ').addEventListener('input', e => { e.stopPropagation(); renderRows(); });
+  $('rosterQ').addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
   $('rosterTable').addEventListener('click', e => {
     const b = e.target.closest('[data-rdel]'); if (!b) return;
     const i = state.roster.findIndex(p => p.no === +b.dataset.rdel); if (i < 0) return;
     (state.removed = state.removed || []).push(state.roster[i]);
     state.roster.splice(i, 1); renderRoster(); touch('roster');
   });
-  $('rosterInfo').addEventListener('click', e => {
+  $('rosterInfo').addEventListener('click', async e => {
+    if (e.target.closest('#rAll')) {
+      const ok = await A.dialog({ title: '명단 모두 빼기', message: `명단 ${state.roster.length}명을 모두 뺄까요?\n저장하기 전까지는 '모두 되살리기'로 되돌릴 수 있어요.`, ok: '모두 빼기', danger: true });
+      if (!ok) return;
+      state.removed = (state.removed || []).concat(state.roster); state.roster = []; renderRoster(); touch('roster');
+      if (!walkin()) A.toast("명단이 비었어요. 명단 없이 받으려면 '명단에 없는 사람도 출석 받기'나 '이름 없이 받기'를 켜 주세요", 'bad');
+      return;
+    }
+    if (e.target.closest('#rUndoAll')) { state.roster = state.roster.concat(state.removed || []).sort((a, b) => a.no - b.no); state.removed = []; renderRoster(); touch('roster'); return; }
     if (!e.target.closest('#rUndo')) return;
     const back = (state.removed || []).pop(); if (!back) return;
     state.roster.push(back); state.roster.sort((a, b) => a.no - b.no); renderRoster(); touch('roster');
@@ -208,11 +218,22 @@
     const dup = Object.keys(names).filter(n => names[n] > 1);
     $('rosterInfo').innerHTML = r.length ? `<div class="ok-box">${(state.removed || []).length ? `명단 <b>${r.length}명</b>.` : `<b>${r.length}명</b>을 읽었어요.`}${skipped && !state.history ? ` 이름이 빈 줄 ${skipped}개는 뺐어요.` : ''}
       ${dup.length ? `<br>동명이인: ${dup.map(A.esc).join(', ')} — 휴대폰에서 부서와 함께 보여서 구분돼요.` : ''}
-      ${(state.removed || []).length ? `<br>뺀 사람 ${state.removed.length}명 (${state.removed.slice(-3).map(p => A.esc(p.name)).join(', ')}${state.removed.length > 3 ? ' 등' : ''}) <button type="button" class="link-btn" id="rUndo">↩ 방금 뺀 사람 되살리기</button>` : '<br><span class="hint-inline">빼야 할 사람은 표 오른쪽 ✕를 누르세요.</span>'}</div>` : '';
+      <button type="button" class="link-btn danger" id="rAll">🗑 명단 모두 빼기</button>
+      ${(state.removed || []).length ? `<br>뺀 사람 ${state.removed.length}명 (${state.removed.slice(-3).map(p => A.esc(p.name)).join(', ')}${state.removed.length > 3 ? ' 등' : ''}) <button type="button" class="link-btn" id="rUndo">↩ 방금 뺀 사람 되살리기</button>` : '<br><span class="hint-inline">빼야 할 사람은 표 오른쪽 ✕를 누르세요.</span>'}</div>` : (state.removed || []).length ? `<div class="ok-box warn-box">명단을 모두 뺐어요 (${state.removed.length}명). 저장하면 명단 없이 받아요. <button type="button" class="link-btn" id="rUndoAll">↩ 모두 되살리기</button></div>` : '';
     const ph = r.some(p => p.phone), nPh = r.filter(p => p.phone).length;
     if (r.length && ph) $('rosterInfo').firstElementChild.insertAdjacentHTML('beforeend', `<br>연락처 ${nPh}명 — 관리 링크로 연 화면(미참석자 확인)에서만 보이고, 참석자 휴대폰에는 나오지 않아요.`);
     if (r.length && state.history) $('rosterInfo').insertAdjacentHTML('beforeend', `<div class="ok-box hist-box"><label class="check"><input type="checkbox" id="histChk" checked> <b>지난 출석 기록도 이어 붙이기</b></label>
       <p class="hint" style="margin:4px 0 0">받아 두었던 '전체 출석부' 파일이에요. 지난 회차 ${state.history.sessions.length}개(출석 ${state.history.rows}건)를 ${EDIT ? '저장할' : '만들'} 때 함께 되살려요. 같은 회차를 두 번 올려도 한 번만 들어가요.</p></div>`);
+    $('rosterFind').hidden = r.length < 2;
+    if (!r.length) $('rosterQ').value = '';
+    renderRows();
+  }
+  // 명단 표 그리기 — 찾기 칸에 쓴 글자가 이름·부서·직급·연번에 들어간 사람만
+  function renderRows() {
+    const all = state.roster, q = $('rosterQ').value.trim().toLowerCase().replace(/\s+/g, '');
+    const r = q ? all.filter(p => (String(p.no) + p.name + p.dept + p.rank).toLowerCase().replace(/\s+/g, '').includes(q)) : all;
+    const ph = all.some(p => p.phone);
+    $('rosterHit').textContent = q ? (r.length ? `${r.length}명 찾았어요` : '찾는 사람이 없어요') : '';
     $('rosterTable').innerHTML = r.length ? `<thead><tr><th>연번</th><th>부서명</th><th>직위(직급)</th><th>성명</th>${ph ? '<th>연락처</th>' : ''}<th class="rdel-h"><span class="sr">빼기</span></th></tr></thead><tbody>` +
       r.map(p => `<tr><td>${p.no}</td><td>${A.esc(p.dept)}</td><td>${A.esc(p.rank)}</td><td>${A.esc(p.name)}</td>${ph ? `<td>${A.esc(p.phone || '')}</td>` : ''}<td class="rdel"><button type="button" data-rdel="${p.no}" aria-label="${A.esc(p.name)} 명단에서 빼기" title="명단에서 빼기">✕</button></td></tr>`).join('') + '</tbody>' : '';
   }
