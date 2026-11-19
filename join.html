@@ -60,6 +60,7 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
 /* 직접 쓰기(명단에 없는 사람) · 내 퇴실 */
 .wfield{margin-bottom:14px}
 .wfield input{font-size:17px}
+.wfield .opt{font-size:12px;font-weight:600;color:#6b7280;background:#f1f3f6;border-radius:6px;padding:1px 6px;margin-left:4px;vertical-align:1px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chips button{font:inherit;font-size:14px;border:1.5px solid var(--line);background:var(--panel);color:var(--text);border-radius:99px;padding:7px 12px;cursor:pointer;min-height:36px}
 .chips button:active{background:var(--soft)}
@@ -135,6 +136,7 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
     </div>
     <div id="writeBox" hidden>
       <div class="wfield"><label class="f" for="wDept">부서(소속)</label><input type="text" id="wDept" maxlength="60" autocomplete="off" placeholder="예: 기획예산과"><div class="chips" id="deptChips"></div></div>
+      <div class="wfield"><label class="f" for="wRank">직위(직급) <small class="opt">선택</small></label><input type="text" id="wRank" maxlength="30" autocomplete="off" placeholder="예: 주무관, 팀장 (안 써도 돼요)"></div>
       <div class="wfield"><label class="f" for="wName">이름</label><input type="text" id="wName" maxlength="40" autocomplete="name" placeholder="이름을 써 주세요"></div>
     </div>
     <div id="meBox" hidden><div class="me-card"><span id="meDept"></span><b id="meName"></b><small id="meAt"></small></div></div>
@@ -171,7 +173,7 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
 
   function apply(ev, assets){
     cfg = A.withDefaults(ev.config); roster = ev.roster || []; session = ev.session;
-    people = roster.concat((ev.extras || []).map(x => ({ ...x, rank: '', extra: true })));
+    people = roster.concat((ev.extras || []).map(x => ({ ...x, rank: x.rank || '', extra: true })));
     const set = new Set([...(cfg.attend.depts || []), ...people.map(p => p.dept)].map(d => String(d || '').trim()).filter(Boolean));
     depts = [...set];
     A.applyColors(document.documentElement, cfg.screen.bg, cfg.screen.accent);
@@ -475,14 +477,21 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
     try { Sound.configure('sfx'); Sound.unlock(); } catch (e) {}   // 누른 순간 소리 준비 (휴대폰은 효과음만)
     try {
       let r;
-      if (PREVIEW) r = { ...(write ? { no: 0, dept: $('wDept').value.trim(), name: $('wName').value.trim() } : people.find(x => x.no === chosen)), status: 'ok', session: session.label, at: new Date().toISOString() };
+      if (PREVIEW) r = { ...(write ? { no: 0, dept: $('wDept').value.trim(), rank: $('wRank').value.trim(), name: $('wName').value.trim() } : people.find(x => x.no === chosen)), status: 'ok', session: session.label, at: new Date().toISOString() };
       else if (legacy) r = await A.rpc('submit_attendance', { p_id: eventId, p_no: chosen });
-      else r = await A.rpc('submit_attendance2', { p_id: eventId, p_no: write ? null : chosen, p_dept: write ? $('wDept').value : null, p_name: write ? $('wName').value : null, p_device: DEVICE, p_pass: pass });
+      else {
+        const args = { p_id: eventId, p_no: write ? null : chosen, p_dept: write ? $('wDept').value : null, p_name: write ? $('wName').value : null, p_device: DEVICE, p_pass: pass };
+        const rank = write ? $('wRank').value.trim() : '';
+        if (rank) {   // 직위를 썼으면 새 함수로. 저장소가 아직 예전 것이면 직위 없이 그대로 출석
+          try { r = await A.rpc('submit_attendance3', { ...args, p_rank: rank }); }
+          catch (e2) { if (!A.noFn(e2)) throw e2; r = await A.rpc('submit_attendance2', args); }
+        } else r = await A.rpc('submit_attendance2', args);
+      }
       if (r.status === 'error') {
         if (r.code === 'qr') { full('QR이 바뀌었어요', '강의실 화면의 QR을 다시 찍어 주세요.'); return; }
         throw new Error(r.message);
       }
-      if (!PREVIEW) { store.set(doneKey(r.kind), r); store.set('me:' + eventId, { no: r.no, dept: r.dept, name: r.name }); }
+      if (!PREVIEW) { store.set(doneKey(r.kind), r); store.set('me:' + eventId, { no: r.no, dept: r.dept, rank: r.rank || '', name: r.name }); }
       if (r.kind && session && (r.kind === 'out') !== isOut()) { session.mode = r.kind; }
       showResult(r);
     } catch (e) {
@@ -551,7 +560,7 @@ body{background:var(--bg);min-height:100vh;min-height:100dvh}
       if (mine && people.some(p => p.no === mine.no)) {
         if (out && !strictOn()) { meP = { ...mine, at: (store.get(doneKey('in')) || {}).at }; chosen = mine.no; setView('me'); show('formPanel'); return; }
         chosen = mine.no; renderList('');
-      } else if (mine && canWrite()) { $('wDept').value = mine.dept || ''; $('wName').value = mine.name || ''; }
+      } else if (mine && canWrite()) { $('wDept').value = mine.dept || ''; $('wRank').value = mine.rank || ''; $('wName').value = mine.name || ''; }
       setView(roster.length ? 'pick' : 'write');
       show('formPanel');
     } catch (e) { full('불러오지 못했습니다', e.message); }

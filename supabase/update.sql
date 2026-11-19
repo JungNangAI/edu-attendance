@@ -56,6 +56,7 @@ create table if not exists extras (               -- 명단에 없이 온 사람
   created_at timestamptz not null default now(),
   primary key (event_id, no)
 );
+alter table extras     add column if not exists rank       text not null default '';   -- 직접 쓴 사람의 직위(직급, 선택)
 alter table attendance add column if not exists device     text;   -- 입실한 휴대폰 표(해시). 한 휴대폰 한 사람·퇴실 짝 맞추기
 alter table attendance add column if not exists out_device text;   -- 퇴실한 휴대폰 표(해시)
 alter table attendance add column if not exists via        text;   -- 'admin' = 담당자가 대신 입실 처리
@@ -180,7 +181,7 @@ create or replace function _person(e events, p_no int) returns jsonb
 language sql stable security definer set search_path = public, extensions as $$
   select coalesce(
     (select x from jsonb_array_elements(e.roster) x where (x->>'no')::int = p_no limit 1),
-    (select jsonb_build_object('no', x.no, 'dept', x.dept, 'rank', '', 'name', x.name, 'extra', true)
+    (select jsonb_build_object('no', x.no, 'dept', x.dept, 'rank', coalesce(x.rank, ''), 'name', x.name, 'extra', true)
        from extras x where x.event_id = e.id and x.no = p_no));
 $$;
 
@@ -252,7 +253,7 @@ language sql security definer set search_path = public, extensions as $$
     'id', e.id,
     'config', e.config,
     'roster', e.roster,
-    'extras', coalesce((select jsonb_agg(jsonb_build_object('no', x.no, 'dept', x.dept, 'name', x.name) order by x.no)
+    'extras', coalesce((select jsonb_agg(jsonb_build_object('no', x.no, 'dept', x.dept, 'rank', coalesce(x.rank, ''), 'name', x.name) order by x.no)
                         from extras x where x.event_id = e.id), '[]'::jsonb),
     'session', (select jsonb_build_object('id', s.id, 'label', s.label, 'started_at', s.started_at, 'mode', s.mode)
                 from sessions s where s.id = e.current_session),
@@ -417,6 +418,21 @@ begin
   return p || jsonb_build_object('status', 'ok', 'kind', 'in', 'session', s.label, 'at', t);
 end $$;
 
+-- 직접 쓰기에 직위(직급, 선택)까지 받는 출석. 출석은 submit_attendance2가 하고, 새로 등록된 사람이면 직위를 적는다
+create or replace function submit_attendance3(p_id uuid, p_no int, p_dept text, p_name text, p_rank text, p_device text, p_pass text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare r jsonb; rk text; n int;
+begin
+  r := submit_attendance2(p_id, p_no, p_dept, p_name, p_device, p_pass);
+  rk := _clean_text(p_rank, 30);
+  if p_no is null and rk <> '' and coalesce((r->>'extra')::boolean, false) and r->>'no' is not null then
+    n := (r->>'no')::int;
+    update extras set rank = rk where event_id = p_id and no = n and rank = '';
+    r := r || jsonb_build_object('rank', (select x.rank from extras x where x.event_id = p_id and x.no = n));
+  end if;
+  return r;
+end $$;
+
 -- 예전 화면(새로고침 전 휴대폰)이 부르는 함수. 새 함수로 넘긴다
 create or replace function submit_attendance(p_id uuid, p_no int) returns jsonb
 language sql security definer set search_path = public, extensions as $$
@@ -454,7 +470,7 @@ begin
     'session', jsonb_build_object('id', s.id, 'label', s.label, 'started_at', s.started_at, 'mode', s.mode, 'poll_id', s.poll_id),
     'updated_at', e.updated_at,
     'list', coalesce((select jsonb_agg(jsonb_build_object('no', a.person_no, 'at', a.at)
-                        || coalesce((select jsonb_build_object('dept', x.dept, 'name', x.name) from extras x
+                        || coalesce((select jsonb_build_object('dept', x.dept, 'rank', coalesce(x.rank, ''), 'name', x.name) from extras x
                                       where x.event_id = a.event_id and x.no = a.person_no), '{}'::jsonb) order by a.at)
                       from attendance a where a.session_id = s.id and a.at is not null), '[]'::jsonb),
     'outs', coalesce((select jsonb_agg(jsonb_build_object('no', a.person_no, 'at', a.out_at) order by a.out_at)
@@ -565,7 +581,7 @@ begin
     'sessions', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'label', label, 'started_at', started_at) order by started_at)
                           from sessions where event_id = p_id), '[]'::jsonb),
     'current', (select current_session from events where id = p_id),
-    'extras', coalesce((select jsonb_agg(jsonb_build_object('no', x.no, 'dept', x.dept, 'name', x.name) order by x.no)
+    'extras', coalesce((select jsonb_agg(jsonb_build_object('no', x.no, 'dept', x.dept, 'rank', coalesce(x.rank, ''), 'name', x.name) order by x.no)
                         from extras x where x.event_id = p_id), '[]'::jsonb),
     'attendance', coalesce((select jsonb_agg(jsonb_build_object('session_id', session_id, 'no', person_no, 'at', at, 'out_at', out_at,
                               'via', via, 'out_via', out_via, 'dev', left(device, 8), 'out_dev', left(out_device, 8)) order by coalesce(at, out_at))
@@ -1265,7 +1281,7 @@ begin
     'set_asset(uuid,text,text,text)', 'new_session(uuid,text,text)', 'rename_session(uuid,text,text)',
     'cancel_attendance(uuid,text,int)', 'export_all(uuid,text)', 'delete_event(uuid,text)',
     'set_mode(uuid,text,text)', 'get_phones(uuid,text)',
-    'join_enter(uuid,text,text)', 'submit_attendance2(uuid,int,text,text,text,text)', 'undo_my_attendance(uuid,text)',
+    'join_enter(uuid,text,text)', 'submit_attendance2(uuid,int,text,text,text,text)', 'submit_attendance3(uuid,int,text,text,text,text,text)', 'undo_my_attendance(uuid,text)',
     'admin_mark(uuid,text,int,text)', 'admin_add(uuid,text,text,text)', 'get_qr(uuid,text)',
     'get_board2(uuid,text)', 'extend_keep(uuid,text)', 'import_history(uuid,text,jsonb)', 'submit_survey(uuid,text,jsonb)',
     'ask_question(uuid,text,text,boolean)', 'like_question(uuid,text,bigint)', 'get_questions(uuid,text,text)',

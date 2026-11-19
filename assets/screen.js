@@ -663,7 +663,7 @@
   function applyEvent(ev, assetMap) {
     cfg = A.withDefaults(ev.config);
     roster = ev.roster || []; byNo = new Map(roster.map(p => [p.no, p])); rosterNos = new Set(roster.map(p => p.no));
-    (ev.extras || []).forEach(x => extraMap.set(x.no, { no: x.no, dept: x.dept || '', rank: '', name: x.name, extra: true }));
+    (ev.extras || []).forEach(x => extraMap.set(x.no, { no: x.no, dept: x.dept || '', rank: x.rank || '', name: x.name, extra: true }));
     extraMap.forEach((p, no) => { if (!byNo.has(no)) byNo.set(no, p); });
     assets = assetMap || {};
     theme = A.THEMES[cfg.screen.theme] ? cfg.screen.theme : 'card';
@@ -815,7 +815,7 @@
       const nos = b.list.map(x => x.no); lastList = b.list;
       b.list.forEach(x => {   // 명단 밖에서 온 사람은 보드 자료에 부서·이름이 함께 온다
         if (x.name == null || rosterNos.has(x.no)) return;
-        const p = { no: x.no, dept: x.dept || '', rank: '', name: x.name, extra: true }; extraMap.set(x.no, p); byNo.set(x.no, p);
+        const p = { no: x.no, dept: x.dept || '', rank: x.rank || '', name: x.name, extra: true }; extraMap.set(x.no, p); byNo.set(x.no, p);
       });
       const newMode = b.session.mode || 'in', newPoll = b.session.poll_id || null;
       if ((b.survey_n || 0) !== surveyN) { surveyN = b.survey_n || 0; if (mode === 'survey' && sessionLabel) $('session').textContent = sessionLabel + modeSuffix(); }
@@ -867,7 +867,7 @@
   // 엑셀용 자료: 명단 + 명단 밖에서 온 사람, 담당자 처리·같은 휴대폰 표시 (예전 저장소면 없는 칸은 빈 것으로)
   async function exportData() {
     const d = await A.rpc('export_all', { p_id: eventId, p_token: token });
-    const ex = (d.extras || []).map(x => ({ no: x.no, dept: x.dept || '', rank: '', name: x.name, extra: true }));
+    const ex = (d.extras || []).map(x => ({ no: x.no, dept: x.dept || '', rank: x.rank || '', name: x.name, extra: true }));
     return { d, all: roster.concat(ex) };
   }
   const statusOf = (a, usesOut) => !a ? '' : a.at && a.out_at ? '완료' : a.at ? (usesOut ? '퇴실 없음' : '출석') : '퇴실만';
